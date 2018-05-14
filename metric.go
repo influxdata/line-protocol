@@ -20,8 +20,6 @@ type Metric interface {
 	Name() string
 	TagList() []*Tag
 	FieldList() []*Field
-	AddTag(key, value string)
-	AddField(key string, value interface{})
 }
 
 // FieldSortOrder is a type for controlling if Fields are sorted
