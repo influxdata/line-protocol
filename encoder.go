@@ -18,6 +18,7 @@ type Encoder struct {
 	fieldTypeSupport FieldTypeSupport
 	failOnFieldError bool
 	maxLineBytes     int
+	fieldList        []*Field
 	header           []byte
 	footer           []byte
 	pair             []byte
@@ -52,10 +53,11 @@ func (e *Encoder) FailOnFieldErr(s bool) {
 // https://docs.influxdata.com/influxdb/v1.5/write_protocols/line_protocol_reference/
 func NewEncoder(w io.Writer) *Encoder {
 	return &Encoder{
-		w:      w,
-		header: make([]byte, 0, 128),
-		footer: make([]byte, 0, 128),
-		pair:   make([]byte, 0, 128),
+		w:         w,
+		header:    make([]byte, 0, 128),
+		footer:    make([]byte, 0, 128),
+		pair:      make([]byte, 0, 128),
+		fieldList: make([]*Field, 0, 16),
 	}
 }
 
@@ -72,16 +74,19 @@ func (e *Encoder) Encode(m Metric) (int, error) {
 
 	e.buildFooter(m)
 
+	// here we make a copy of the fields so we can do an in-place sort
+	e.fieldList = append(e.fieldList[:0], m.FieldList()...)
+
 	if e.fieldSortOrder == SortFields {
-		sort.Slice(m.FieldList(), func(i, j int) bool {
-			return m.FieldList()[i].Key < m.FieldList()[j].Key
+		sort.Slice(e.fieldList, func(i, j int) bool {
+			return e.fieldList[i].Key < e.fieldList[j].Key
 		})
 	}
 	i := 0
 	totalWritten := 0
 	pairsLen := 0
 	firstField := true
-	for _, field := range m.FieldList() {
+	for _, field := range e.fieldList {
 		err = e.buildFieldPair(field.Key, field.Value)
 		if err != nil {
 			if e.failOnFieldError {
