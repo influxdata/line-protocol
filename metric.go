@@ -8,7 +8,7 @@ type Tag struct {
 	Value string
 }
 
-// Field holds the keys and values for a bunch of Metric Field k/v pairs
+// Field holds the keys and values for a bunch of Metric Field k/v pairs where Value can be a uint64, int64, int, float32, float64, string, or bool
 type Field struct {
 	Key   string
 	Value interface{}
