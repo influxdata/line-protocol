@@ -2,13 +2,13 @@ package protocol
 
 import "time"
 
-// Tag holds the keys and values for a bunch of Tag k/v pairs
+// Tag holds the keys and values for a bunch of Tag k/v pairs.
 type Tag struct {
 	Key   string
 	Value string
 }
 
-// Field holds the keys and values for a bunch of Metric Field k/v pairs where Value can be a uint64, int64, int, float32, float64, string, or bool
+// Field holds the keys and values for a bunch of Metric Field k/v pairs where Value can be a uint64, int64, int, float32, float64, string, or bool.
 type Field struct {
 	Key   string
 	Value interface{}
@@ -26,18 +26,18 @@ type Metric interface {
 type FieldSortOrder int
 
 const (
-	// NoSortFields tells the Decoder to not sort the fields
+	// NoSortFields tells the Decoder to not sort the fields.
 	NoSortFields FieldSortOrder = iota
 
-	// SortFields tells the Decoder to sort the fields
+	// SortFields tells the Decoder to sort the fields.
 	SortFields
 )
 
-// FieldTypeSupport is a type for the parser to understand its type support
+// FieldTypeSupport is a type for the parser to understand its type support.
 type FieldTypeSupport int
 
 const (
-	// UintSupport means the parser understands uint64s and can store them without having to convert to int64
+	// UintSupport means the parser understands uint64s and can store them without having to convert to int64.
 	UintSupport FieldTypeSupport = 1 << iota
 )
 
@@ -60,12 +60,12 @@ func (e FieldError) Error() string {
 }
 
 var (
-	// ErrNeedMoreSpace tells us that the Decoder's io.Reader is full
+	// ErrNeedMoreSpace tells us that the Decoder's io.Reader is full.
 	ErrNeedMoreSpace = &MetricError{"need more space"}
 
-	// ErrInvalidName tells us that the chosen name is invalid
+	// ErrInvalidName tells us that the chosen name is invalid.
 	ErrInvalidName = &MetricError{"invalid name"}
 
-	// ErrNoFields tells us that there were no serializable fields in the line/metric
+	// ErrNoFields tells us that there were no serializable fields in the line/metric.
 	ErrNoFields = &MetricError{"no serializable fields"}
 )

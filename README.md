@@ -1,6 +1,6 @@
 # line-protocol
 
-This is an encoder for the influx line protocol. https://docs.influxdata.com/influxdb/v1.5/write_protocols/line_protocol_reference/
+This is an encoder for the influx line protocol. https://docs.influxdata.com/influxdb/latest/write_protocols/line_protocol_reference/
 
 It has an interface similar to the standard library's `json.Encoder`.
 
@@ -13,10 +13,10 @@ It has an interface similar to the standard library's `json.Encoder`.
 
 
 ### Example:
-```
-	buf := &bytes.Buffer{}
-	serializer := protocol.NewEncoder(buf)
-	serializer.SetMaxLineBytes(1024)
-	serializer.SetFieldTypeSupport(UintSupport)
-    serializer.Encode(e) // where e is something that implements the protocol.Metric interface
+```go
+buf := &bytes.Buffer{}
+serializer := protocol.NewEncoder(buf)
+serializer.SetMaxLineBytes(1024)
+serializer.SetFieldTypeSupport(UintSupport)
+serializer.Encode(e) // where e is something that implements the protocol.Metric interface
 ```
