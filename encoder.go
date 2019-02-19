@@ -112,6 +112,7 @@ func (e *Encoder) Encode(m Metric) (int, error) {
 			if err != nil {
 				return 0, err
 			}
+			pairsLen = 0
 			totalWritten += i
 
 			bytesNeeded = len(e.header) + len(e.pair) + len(e.footer)
