@@ -6,7 +6,14 @@ import (
 	"math"
 	"sort"
 	"strconv"
+	"time"
 )
+
+// ErrIsNaN is a field error for when a float field is NaN.
+var ErrIsNaN = &FieldError{"is NaN"}
+
+// ErrIsInf is a field error for when a float field is Inf.
+var ErrIsInf = &FieldError{"is Inf"}
 
 // Encoder marshals Metrics into influxdb line protocol.
 // It is not safe for concurrent use, make a new one!
@@ -72,9 +79,9 @@ func (e *Encoder) Encode(m Metric) (int, error) {
 		return 0, err
 	}
 
-	e.buildFooter(m)
+	e.buildFooter(m.Time())
 
-	// here we make a copy of the fields so we can do an in-place sort
+	// here we make a copy of the *fields so we can do an in-place sort
 	e.fieldList = append(e.fieldList[:0], m.FieldList()...)
 
 	if e.fieldSortOrder == SortFields {
@@ -199,16 +206,7 @@ func (e *Encoder) buildHeader(m Metric) error {
 	return nil
 }
 
-func (e *Encoder) buildFieldPair(key string, value interface{}) error {
-	e.pair = e.pair[:0]
-	key = escape(key)
-	// Some keys are not encodeable as line protocol, such as those with a
-	// trailing '\' or empty strings.
-	if key == "" {
-		return &FieldError{"invalid field key"}
-	}
-	e.pair = append(e.pair, key...)
-	e.pair = append(e.pair, '=')
+func (e *Encoder) buildFieldVal(value interface{}) error {
 	switch v := value.(type) {
 	case uint64:
 		if e.fieldTypeSupport&UintSupport != 0 {
@@ -224,22 +222,22 @@ func (e *Encoder) buildFieldPair(key string, value interface{}) error {
 		e.pair = append(strconv.AppendInt(e.pair, int64(v), 10), 'i')
 	case float64:
 		if math.IsNaN(v) {
-			return &FieldError{"is NaN"}
+			return ErrIsNaN
 		}
 
 		if math.IsInf(v, 0) {
-			return &FieldError{"is Inf"}
+			return ErrIsInf
 		}
 
 		e.pair = strconv.AppendFloat(e.pair, v, 'f', -1, 64)
 	case float32:
 		v32 := float64(v)
 		if math.IsNaN(v32) {
-			return &FieldError{"is NaN"}
+			return ErrIsNaN
 		}
 
 		if math.IsInf(v32, 0) {
-			return &FieldError{"is Inf"}
+			return ErrIsInf
 		}
 
 		e.pair = strconv.AppendFloat(e.pair, v32, 'f', -1, 64)
@@ -247,6 +245,10 @@ func (e *Encoder) buildFieldPair(key string, value interface{}) error {
 	case string:
 		e.pair = append(e.pair, '"')
 		e.pair = append(e.pair, stringFieldEscape(v)...)
+		e.pair = append(e.pair, '"')
+	case []byte:
+		e.pair = append(e.pair, '"')
+		e.pair = append(e.pair, stringFieldEscapeBytes(v)...)
 		e.pair = append(e.pair, '"')
 	case bool:
 		e.pair = strconv.AppendBool(e.pair, v)
@@ -256,9 +258,24 @@ func (e *Encoder) buildFieldPair(key string, value interface{}) error {
 	return nil
 }
 
-func (e *Encoder) buildFooter(m Metric) {
+func (e *Encoder) buildFieldPair(key string, value interface{}) error {
+	e.pair = e.pair[:0]
+	key = escape(key)
+	// Some keys are not encodeable as line protocol, such as those with a
+	// trailing '\' or empty strings.
+	if key == "" || key[:len(key)-1] == "\\" {
+		return &FieldError{"invalid field key"}
+	}
+	e.pair = append(e.pair, key...)
+	e.pair = append(e.pair, '=')
+	return e.buildFieldVal(value)
+}
+
+func (e *Encoder) buildFooter(t time.Time) {
 	e.footer = e.footer[:0]
-	e.footer = append(e.footer, ' ')
-	e.footer = strconv.AppendInt(e.footer, m.Time().UnixNano(), 10)
+	if !t.IsZero() {
+		e.footer = append(e.footer, ' ')
+		e.footer = strconv.AppendInt(e.footer, t.UnixNano(), 10)
+	}
 	e.footer = append(e.footer, '\n')
 }

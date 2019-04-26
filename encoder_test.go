@@ -515,6 +515,22 @@ func TestEncoder(t *testing.T) {
 	}
 }
 
+func TestWriter(t *testing.T) {
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf := &bytes.Buffer{}
+			serializer := NewEncoder(buf)
+			serializer.SetMaxLineBytes(tt.maxBytes)
+			serializer.SetFieldSortOrder(SortFields)
+			serializer.SetFieldTypeSupport(tt.typeSupport)
+			serializer.FailOnFieldErr(tt.failOnFieldErr)
+			_, err := serializer.Encode(tt.input)
+			require.Equal(t, tt.err, err)
+			require.Equal(t, string(tt.output), buf.String())
+		})
+	}
+}
+
 func BenchmarkSerializer(b *testing.B) {
 	for _, tt := range tests {
 		b.Run(tt.name, func(b *testing.B) {
@@ -526,6 +542,66 @@ func BenchmarkSerializer(b *testing.B) {
 				output, err := serializer.Encode(tt.input)
 				_ = err
 				_ = output
+			}
+		})
+	}
+}
+
+func BenchmarkWriter(b *testing.B) {
+	type fields struct {
+		name                        []byte
+		ts                          time.Time
+		tagKeys, tagVals, fieldKeys [][]byte
+		fieldVals                   []interface{}
+	}
+	fieldsToBytes := func(tg []*Field) ([][]byte, []interface{}) {
+		b := make([][]byte, len(tg))
+		v := make([]interface{}, len(tg))
+		for i := range tg {
+			b[i] = []byte(tg[i].Key)
+			v[i] = tg[i].Value
+		}
+		return b, v
+	}
+	tagsToBytes := func(tg []*Tag) ([][]byte, [][]byte) {
+		b := make([][]byte, len(tg))
+		v := make([][]byte, len(tg))
+		for i := range tg {
+			b[i] = []byte(tg[i].Key)
+			v[i] = []byte(tg[i].Value)
+		}
+		return b, v
+
+	}
+	benches := make([]struct {
+		name           string
+		maxBytes       int
+		typeSupport    FieldTypeSupport
+		failOnFieldErr bool
+		fields         fields
+	}, len(tests))
+	for i, tt := range tests {
+		benches[i].name = tt.name
+		benches[i].maxBytes = tt.maxBytes
+		benches[i].typeSupport = tt.typeSupport
+		benches[i].fields.name = []byte(tt.input.Name())
+		benches[i].fields.ts = tt.input.Time()
+		benches[i].fields.fieldKeys, benches[i].fields.fieldVals = fieldsToBytes(tt.input.FieldList())
+		benches[i].fields.tagKeys, benches[i].fields.tagVals = tagsToBytes(tt.input.TagList())
+	}
+	b.ResetTimer()
+	for _, tt := range benches {
+		b.Run(tt.name, func(b *testing.B) {
+			buf := &bytes.Buffer{}
+			serializer := NewEncoder(buf)
+			serializer.SetMaxLineBytes(tt.maxBytes)
+			serializer.SetFieldTypeSupport(tt.typeSupport)
+			var i int
+			var err error
+			for n := 0; n < b.N; n++ {
+				i, err = serializer.Write(tt.fields.name, tt.fields.ts, tt.fields.tagKeys, tt.fields.tagVals, tt.fields.fieldKeys, tt.fields.fieldVals) //Encode(tt.input)
+				_ = err
+				_ = i
 			}
 		})
 	}
