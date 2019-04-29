@@ -248,7 +248,7 @@ func (e *Encoder) buildFieldVal(value interface{}) error {
 		e.pair = append(e.pair, '"')
 	case []byte:
 		e.pair = append(e.pair, '"')
-		e.pair = append(e.pair, stringFieldEscapeBytes(v)...)
+		stringFieldEscapeBytes(&e.pair, v)
 		e.pair = append(e.pair, '"')
 	case bool:
 		e.pair = strconv.AppendBool(e.pair, v)

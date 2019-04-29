@@ -5,39 +5,28 @@ import (
 	"time"
 )
 
-func (e *Encoder) buildHeaderBytes(name []byte, tagKeys, tagVals [][]byte) error {
+// Write writes out data to a line protocol encoder.  Note: it does no sorting.  It assumes you have done your own sorting for tagValues
+func (e *Encoder) Write(name []byte, ts time.Time, tagKeys, tagVals, fieldKeys [][]byte, fieldVals []interface{}) (int, error) {
 	e.header = e.header[:0]
 	if len(name) == 0 || name[len(name)-1] == byte('\\') {
-		return ErrInvalidName
+		return 0, ErrInvalidName
 	}
-	e.header = append(e.header, name...)
-
+	nameEscapeBytes(&e.header, name)
 	for i := range tagKeys {
-		if len(tagKeys[i]) == 0 || len(tagVals[i]) == 0 || tagKeys[i][len(tagKeys[i])-1] == '\\' || tagVals[i][len(tagVals[i])-1] == '\\' {
+		// Some keys and values are not encodeable as line protocol, such as
+		// those with a trailing '\' or empty strings.
+		if len(tagKeys[i]) == 0 || len(tagVals[i]) == 0 || tagKeys[i][len(tagKeys[i])-1] == byte('\\') {
 			if e.failOnFieldError {
-				return fmt.Errorf("invalid field: key \"%s\", val \"%s\"", tagKeys[i], tagVals[i])
+				return 0, fmt.Errorf("invalid field: key \"%s\", val \"%s\"", tagKeys[i], tagVals[i])
 			}
 			continue
 		}
-		// Some keys and values are not encodeable as line protocol, such as
-		// those with a trailing '\' or empty strings.
-
-		e.header = append(e.header, ',')
-		e.header = append(e.header, escapeBytes(tagKeys[i])...)
-		e.header = append(e.header, '=')
-		e.header = append(e.header, escapeBytes(tagVals[i])...)
+		e.header = append(e.header, byte(','))
+		escapeBytes(&e.header, tagKeys[i])
+		e.header = append(e.header, byte('='))
+		escapeBytes(&e.header, tagVals[i])
 	}
-
-	e.header = append(e.header, ' ')
-	return nil
-}
-
-func (e *Encoder) Write(name []byte, ts time.Time, tagKeys, tagVals, fieldKeys [][]byte, fieldVals []interface{}) (int, error) {
-	err := e.buildHeaderBytes(name, tagKeys, tagVals)
-	if err != nil {
-		return 0, err
-	}
-
+	e.header = append(e.header, byte(' '))
 	e.buildFooter(ts)
 
 	i := 0
@@ -45,7 +34,19 @@ func (e *Encoder) Write(name []byte, ts time.Time, tagKeys, tagVals, fieldKeys [
 	pairsLen := 0
 	firstField := true
 	for i := range fieldKeys {
-		err = e.buildFieldPairBytes(fieldKeys[i], fieldVals[i])
+		e.pair = e.pair[:0]
+		key := fieldKeys[i]
+		if len(key) == 0 || key[len(key)-1] == byte('\\') {
+			if e.failOnFieldError {
+				return 0, &FieldError{"invalid field key"}
+			}
+			continue
+		}
+		escapeBytes(&e.pair, key)
+		// Some keys are not encodeable as line protocol, such as those with a
+		// trailing '\' or empty strings.
+		e.pair = append(e.pair, byte('='))
+		err := e.buildFieldVal(fieldVals[i])
 		if err != nil {
 			if e.failOnFieldError {
 				return 0, err
@@ -120,23 +121,10 @@ func (e *Encoder) Write(name []byte, ts time.Time, tagKeys, tagVals, fieldKeys [
 	if firstField {
 		return 0, ErrNoFields
 	}
-	i, err = e.w.Write(e.footer)
+	i, err := e.w.Write(e.footer)
 	if err != nil {
 		return 0, err
 	}
 	totalWritten += i
 	return totalWritten, nil
-}
-
-func (e *Encoder) buildFieldPairBytes(key []byte, value interface{}) error {
-	e.pair = e.pair[:0]
-	key = escapeBytes(key)
-	// Some keys are not encodeable as line protocol, such as those with a
-	// trailing '\' or empty strings.
-	if len(key) == 0 || key[len(key)-1] == byte('\\') {
-		return &FieldError{"invalid field key"}
-	}
-	e.pair = append(e.pair, key...)
-	e.pair = append(e.pair, '=')
-	return e.buildFieldVal(value)
 }

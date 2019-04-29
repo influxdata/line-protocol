@@ -10,13 +10,15 @@ func BenchmarkStringEscFunc4(b *testing.B) {
 		b := escape(s)
 		_ = b
 	}
+
 }
 
 func BenchmarkEscFunc4(b *testing.B) {
 	s := []byte("h\tello ⛵ \t \t")
+	dest := make([]byte, 32)
 	for i := 0; i < b.N; i++ {
-		b := escapeBytes(s)
-		resturnToEscaperPool(b)
+		escapeBytes(&dest, s)
+		dest = dest[:0]
 	}
 }
 
@@ -53,10 +55,12 @@ func TestBytesEscape(t *testing.T) {
 			want: `\t\n\f\r\"`,
 		},
 	}
+	got := []byte{}
 	for _, x := range cases {
-		got := string(escapeBytes([]byte(x.arg)))
-		if got != string(x.want) {
+		escapeBytes(&got, []byte(x.arg))
+		if string(got) != string(x.want) {
 			t.Fatalf("did not escape %s properly, expected %s got %s", x.name, x.want, got)
 		}
+		got = got[:0]
 	}
 }

@@ -3,7 +3,6 @@ package protocol
 import (
 	"bytes"
 	"strings"
-	"sync"
 	"unicode/utf8"
 )
 
@@ -41,36 +40,6 @@ var (
 		`"`, `\"`,
 		`\`, `\\`,
 	)
-
-	// var (
-	// 	bytesEscaper = strings.NewReplacer(
-	// 		"\t", `\t`,
-	// 		"\n", `\n`,
-	// 		"\f", `\f`,
-	// 		"\r", `\r`,
-	// 		`,`, `\,`,
-	// 		` `, `\ `,
-	// 		`=`, `\=`,
-	// 	)
-
-	// 	nameBscaper = strings.NewReplacer(
-	// 		"\t", `\t`,
-	// 		"\n", `\n`,
-	// 		"\f", `\f`,
-	// 		"\r", `\r`,
-	// 		`,`, `\,`,
-	// 		` `, `\ `,
-	// 	)
-
-	// 	stringFieldEscaper = strings.NewReplacer(
-	// 		"\t", `\t`,
-	// 		"\n", `\n`,
-	// 		"\f", `\f`,
-	// 		"\r", `\r`,
-	// 		`"`, `\"`,
-	// 		`\`, `\\`,
-	// 	)
-	// )
 )
 
 // The various escape functions allocate, I'd like to fix that.
@@ -100,32 +69,6 @@ func stringFieldEscape(s string) string {
 	return s
 }
 
-var escaperPool = sync.Pool{New: func() interface{} { return make([]byte, 0, 10) }}
-
-func resturnToEscaperPool(b []byte) {
-	if cap(b) > 64 {
-		// early exit
-		return
-	}
-	escaperPool.Put(b)
-}
-
-func runesToUTF8Manual2(rs []rune) []byte {
-	size := 0
-	for _, r := range rs {
-		size += utf8.RuneLen(r)
-	}
-
-	bs := make([]byte, size)
-
-	count := 0
-	for _, r := range rs {
-		count += utf8.EncodeRune(bs[count:], r)
-	}
-
-	return bs
-}
-
 const (
 	utf8mask  = byte(0x3F)
 	utf8bytex = byte(0x80) // 1000 0000
@@ -134,117 +77,108 @@ const (
 	utf8len4  = byte(0xF0) // 1111 0000
 )
 
-func escapeBytes(b []byte) []byte {
+func escapeBytes(dest *[]byte, b []byte) {
 	if bytes.ContainsAny(b, escapes) {
 		var r rune
-		var i int
-		res := escaperPool.Get().([]byte)
-		for len(b) > 0 {
-			r, i = utf8.DecodeRune(b)
+		for i, j := 0, 0; i < len(b); i += j {
+			r, j = utf8.DecodeRune(b[i:])
 			switch {
 			case r == '\t':
-				res = append(res, `\t`...)
+				*dest = append(*dest, `\t`...)
 			case r == '\n':
-				res = append(res, `\n`...)
+				*dest = append(*dest, `\n`...)
 			case r == '\f':
-				res = append(res, `\f`...)
+				*dest = append(*dest, `\f`...)
 			case r == '\r':
-				res = append(res, `\r`...)
+				*dest = append(*dest, `\r`...)
 			case r == ',':
-				res = append(res, `\,`...)
+				*dest = append(*dest, `\,`...)
 			case r == ' ':
-				res = append(res, `\ `...)
+				*dest = append(*dest, `\ `...)
 			case r == '=':
-				res = append(res, `\=`...)
+				*dest = append(*dest, `\=`...)
 			case r <= 1<<7-1:
-				res = append(res, byte(r))
+				*dest = append(*dest, byte(r))
 			case r <= 1<<11-1:
-				res = append(res, utf8len2|byte(r>>6), utf8bytex|byte(r)&utf8mask)
+				*dest = append(*dest, utf8len2|byte(r>>6), utf8bytex|byte(r)&utf8mask)
 			case r <= 1<<16-1:
-				res = append(res, utf8len3|byte(r>>12), utf8bytex|byte(r>>6)&utf8mask, utf8bytex|byte(r)&utf8mask)
+				*dest = append(*dest, utf8len3|byte(r>>12), utf8bytex|byte(r>>6)&utf8mask, utf8bytex|byte(r)&utf8mask)
 			default:
-				res = append(res, utf8len4|byte(r>>18), utf8bytex|byte(r>>12)&utf8mask, utf8bytex|byte(r>>6)&utf8mask, utf8bytex|byte(r)&utf8mask)
+				*dest = append(*dest, utf8len4|byte(r>>18), utf8bytex|byte(r>>12)&utf8mask, utf8bytex|byte(r>>6)&utf8mask, utf8bytex|byte(r)&utf8mask)
 			}
-			b = b[i:len(b):cap(b)]
 		}
-		return res
+		return
 	}
-	return b
+	*dest = append(*dest, b...)
 }
 
 // Escape a measurement name
-func nameEscapeBytes(b []byte) []byte {
+func nameEscapeBytes(dest *[]byte, b []byte) {
 	if bytes.ContainsAny(b, nameEscapes) {
 		var r rune
-		var i int
-		res := escaperPool.Get().([]byte)
-		for len(b) > 0 {
-			r, i = utf8.DecodeRune(b)
+		for i, j := 0, 0; i < len(b); i += j {
+			r, j = utf8.DecodeRune(b[i:])
 			switch {
 			case r == '\t':
-				res = append(res, `\t`...)
+				*dest = append(*dest, `\t`...)
 			case r == '\n':
-				res = append(res, `\n`...)
+				*dest = append(*dest, `\n`...)
 			case r == '\f':
-				res = append(res, `\f`...)
+				*dest = append(*dest, `\f`...)
 			case r == '\r':
-				res = append(res, `\r`...)
+				*dest = append(*dest, `\r`...)
 			case r == ',':
-				res = append(res, `\,`...)
+				*dest = append(*dest, `\,`...)
 			case r == ' ':
-				res = append(res, `\ `...)
+				*dest = append(*dest, `\ `...)
 			case r == '\\':
-				res = append(res, `\\`...)
+				*dest = append(*dest, `\\`...)
 			case r <= 1<<7-1:
-				res = append(res, byte(r))
+				*dest = append(*dest, byte(r))
 			case r <= 1<<11-1:
-				res = append(res, utf8len2|byte(r>>6), utf8bytex|byte(r)&utf8mask)
+				*dest = append(*dest, utf8len2|byte(r>>6), utf8bytex|byte(r)&utf8mask)
 			case r <= 1<<16-1:
-				res = append(res, utf8len3|byte(r>>12), utf8bytex|byte(r>>6)&utf8mask, utf8bytex|byte(r)&utf8mask)
+				*dest = append(*dest, utf8len3|byte(r>>12), utf8bytex|byte(r>>6)&utf8mask, utf8bytex|byte(r)&utf8mask)
 			default:
-				res = append(res, utf8len4|byte(r>>18), utf8bytex|byte(r>>12)&utf8mask, utf8bytex|byte(r>>6)&utf8mask, utf8bytex|byte(r)&utf8mask)
+				*dest = append(*dest, utf8len4|byte(r>>18), utf8bytex|byte(r>>12)&utf8mask, utf8bytex|byte(r>>6)&utf8mask, utf8bytex|byte(r)&utf8mask)
 			}
-			b = b[i:len(b):cap(b)]
 		}
-		return res
+		return
 	}
-	return b
+	*dest = append(*dest, b...)
 }
 
-func stringFieldEscapeBytes(b []byte) []byte {
+func stringFieldEscapeBytes(dest *[]byte, b []byte) {
 	if bytes.ContainsAny(b, stringFieldEscapes) {
 		var r rune
-		var i int
-		res := escaperPool.Get().([]byte)
-		for len(b) > 0 {
-			r, i = utf8.DecodeRune(b)
+		for i, j := 0, 0; i < len(b); i += j {
+			r, j = utf8.DecodeRune(b[i:])
 			switch {
 			case r == '\t':
-				res = append(res, `\t`...)
+				*dest = append(*dest, `\t`...)
 			case r == '\n':
-				res = append(res, `\n`...)
+				*dest = append(*dest, `\n`...)
 			case r == '\f':
-				res = append(res, `\f`...)
+				*dest = append(*dest, `\f`...)
 			case r == '\r':
-				res = append(res, `\r`...)
+				*dest = append(*dest, `\r`...)
 			case r == ',':
-				res = append(res, `\,`...)
+				*dest = append(*dest, `\,`...)
 			case r == ' ':
-				res = append(res, `\ `...)
+				*dest = append(*dest, `\ `...)
 			case r == '\\':
-				res = append(res, `\\`...)
+				*dest = append(*dest, `\\`...)
 			case r <= 1<<7-1:
-				res = append(res, byte(r))
+				*dest = append(*dest, byte(r))
 			case r <= 1<<11-1:
-				res = append(res, utf8len2|byte(r>>6), utf8bytex|byte(r)&utf8mask)
+				*dest = append(*dest, utf8len2|byte(r>>6), utf8bytex|byte(r)&utf8mask)
 			case r <= 1<<16-1:
-				res = append(res, utf8len3|byte(r>>12), utf8bytex|byte(r>>6)&utf8mask, utf8bytex|byte(r)&utf8mask)
+				*dest = append(*dest, utf8len3|byte(r>>12), utf8bytex|byte(r>>6)&utf8mask, utf8bytex|byte(r)&utf8mask)
 			default:
-				res = append(res, utf8len4|byte(r>>18), utf8bytex|byte(r>>12)&utf8mask, utf8bytex|byte(r>>6)&utf8mask, utf8bytex|byte(r)&utf8mask)
+				*dest = append(*dest, utf8len4|byte(r>>18), utf8bytex|byte(r>>12)&utf8mask, utf8bytex|byte(r>>6)&utf8mask, utf8bytex|byte(r)&utf8mask)
 			}
-			b = b[i:len(b):cap(b)]
 		}
-		return res
+		return
 	}
-	return b
+	*dest = append(*dest, b...)
 }
