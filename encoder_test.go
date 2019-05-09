@@ -6,8 +6,6 @@ import (
 	"sort"
 	"testing"
 	"time"
-
-	"github.com/stretchr/testify/require"
 )
 
 type MockMetric struct {
@@ -50,6 +48,9 @@ func (m *MockMetric) AddField(k string, v interface{}) {
 		}
 	}
 	m.fields = append(m.fields, &Field{Key: k, Value: convertField(v)})
+	sort.Slice(m.fields, func(i, j int) bool {
+		return string(m.fields[i].Key) < string(m.fields[j].Key)
+	})
 }
 
 func convertField(v interface{}) interface{} {
@@ -94,12 +95,6 @@ func NewMockMetric(name string,
 	fields map[string]interface{},
 	tm time.Time,
 ) Metric {
-	// var vtype telegraf.ValueType
-	// if len(tp) > 0 {
-	// 	vtype = tp[0]
-	// } else {
-	// 	vtype = telegraf.Untyped
-	// }
 	m := &MockMetric{
 		name:   name,
 		tags:   nil,
@@ -511,7 +506,7 @@ var tests = []struct {
 			time.Unix(0, 0),
 		),
 		failOnFieldErr: true,
-		err:            &FieldError{s: "is NaN"},
+		err:            ErrIsNaN,
 	},
 }
 
@@ -525,10 +520,82 @@ func TestEncoder(t *testing.T) {
 			serializer.SetFieldTypeSupport(tt.typeSupport)
 			serializer.FailOnFieldErr(tt.failOnFieldErr)
 			_, err := serializer.Encode(tt.input)
-			require.Equal(t, tt.err, err)
-			require.Equal(t, string(tt.output), buf.String())
+			if tt.err != err {
+				t.Fatalf("expected error %v, but got %v", tt.err, err)
+			}
+			if string(tt.output) != buf.String() {
+				t.Fatalf("expected output %v, but got %v", tt.output, buf.String())
+			}
 		})
 	}
+}
+
+func TestWriter(t *testing.T) {
+	type args struct {
+		name                        []byte
+		ts                          time.Time
+		tagKeys, tagVals, fieldKeys [][]byte
+		fieldVals                   []interface{}
+	}
+	btests := make([]struct {
+		name           string
+		maxBytes       int
+		typeSupport    FieldTypeSupport
+		failOnFieldErr bool
+		fields         args
+		err            error
+		output         []byte
+	}, len(tests))
+	for i, tt := range tests {
+		btests[i].name = tt.name
+		btests[i].maxBytes = tt.maxBytes
+		btests[i].typeSupport = tt.typeSupport
+		btests[i].failOnFieldErr = tt.failOnFieldErr
+		btests[i].err = tt.err
+		btests[i].output = tt.output
+		btests[i].fields.name = []byte(tt.input.Name())
+		btests[i].fields.ts = tt.input.Time()
+		btests[i].fields.fieldKeys, btests[i].fields.fieldVals = fieldsToBytes(tt.input.FieldList())
+		btests[i].fields.tagKeys, btests[i].fields.tagVals = tagsToBytes(tt.input.TagList())
+	}
+	for _, tt := range btests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf := &bytes.Buffer{}
+			serializer := NewEncoder(buf)
+			serializer.SetMaxLineBytes(tt.maxBytes)
+			serializer.SetFieldSortOrder(SortFields)
+			serializer.SetFieldTypeSupport(tt.typeSupport)
+			serializer.FailOnFieldErr(tt.failOnFieldErr)
+			_, err := serializer.Write(tt.fields.name, tt.fields.ts, tt.fields.tagKeys, tt.fields.tagVals, tt.fields.fieldKeys, tt.fields.fieldVals)
+			if tt.err != err {
+				t.Fatalf("expected error %v, but got %v", tt.err, err)
+			}
+			if string(tt.output) != buf.String() {
+				t.Fatalf("expected output %s, but got %s", tt.output, buf.String())
+			}
+		})
+	}
+}
+
+func fieldsToBytes(tg []*Field) ([][]byte, []interface{}) {
+	b := make([][]byte, len(tg))
+	v := make([]interface{}, len(tg))
+	for i := range tg {
+		b[i] = []byte(tg[i].Key)
+		v[i] = tg[i].Value
+	}
+	return b, v
+}
+
+func tagsToBytes(tg []*Tag) ([][]byte, [][]byte) {
+	b := make([][]byte, len(tg))
+	v := make([][]byte, len(tg))
+	for i := range tg {
+		b[i] = []byte(tg[i].Key)
+		v[i] = []byte(tg[i].Value)
+	}
+	return b, v
+
 }
 
 func BenchmarkSerializer(b *testing.B) {
@@ -543,6 +610,50 @@ func BenchmarkSerializer(b *testing.B) {
 				_ = err
 				_ = output
 			}
+		})
+	}
+}
+
+func BenchmarkWriter(b *testing.B) {
+	type fields struct {
+		name                        []byte
+		ts                          time.Time
+		tagKeys, tagVals, fieldKeys [][]byte
+		fieldVals                   []interface{}
+	}
+	benches := make([]struct {
+		name           string
+		maxBytes       int
+		typeSupport    FieldTypeSupport
+		failOnFieldErr bool
+		fields         fields
+	}, len(tests))
+	for i, tt := range tests {
+		benches[i].name = tt.name
+		benches[i].maxBytes = tt.maxBytes
+		benches[i].typeSupport = tt.typeSupport
+		benches[i].failOnFieldErr = tt.failOnFieldErr
+		benches[i].fields.name = []byte(tt.input.Name())
+		benches[i].fields.ts = tt.input.Time()
+		benches[i].fields.fieldKeys, benches[i].fields.fieldVals = fieldsToBytes(tt.input.FieldList())
+		benches[i].fields.tagKeys, benches[i].fields.tagVals = tagsToBytes(tt.input.TagList())
+	}
+	b.ResetTimer()
+
+	for _, tt := range benches {
+		b.Run(tt.name, func(b *testing.B) {
+			buf := &bytes.Buffer{}
+			serializer := NewEncoder(buf)
+			serializer.SetMaxLineBytes(tt.maxBytes)
+			serializer.SetFieldTypeSupport(tt.typeSupport)
+			var i int
+			var err error
+			for n := 0; n < b.N; n++ {
+				i, err = serializer.Write(tt.fields.name, tt.fields.ts, tt.fields.tagKeys, tt.fields.tagVals, tt.fields.fieldKeys, tt.fields.fieldVals)
+				_ = err
+				_ = i
+			}
+			_ = buf
 		})
 	}
 }
