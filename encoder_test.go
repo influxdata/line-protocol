@@ -508,6 +508,48 @@ var tests = []struct {
 		failOnFieldErr: true,
 		err:            ErrIsNaN,
 	},
+	{
+		name: "error use of reserved _measurement tag key",
+		input: NewMockMetric(
+			"cpu",
+			map[string]string{
+				"_measurement": "cpu",
+			},
+			map[string]interface{}{
+				"value": 42.0,
+			},
+			time.Unix(0, 0),
+		),
+		err: ErrTagKeyReserved,
+	},
+	{
+		name: "error use of reserved _field tag key",
+		input: NewMockMetric(
+			"cpu",
+			map[string]string{
+				"_field": "value",
+			},
+			map[string]interface{}{
+				"value": 42.0,
+			},
+			time.Unix(0, 0),
+		),
+		err: ErrTagKeyReserved,
+	},
+	{
+		name: "error use of reserved time tag key",
+		input: NewMockMetric(
+			"cpu",
+			map[string]string{
+				"time": "1234567890123",
+			},
+			map[string]interface{}{
+				"value": 42.0,
+			},
+			time.Unix(0, 0),
+		),
+		err: ErrTagKeyReserved,
+	},
 }
 
 func TestEncoder(t *testing.T) {

@@ -193,8 +193,15 @@ func (e *Encoder) buildHeader(m Metric) error {
 
 		// Some keys and values are not encodeable as line protocol, such as
 		// those with a trailing '\' or empty strings.
-		if key == "" || value == "" {
+		if value == "" {
 			continue
+		}
+
+		switch key {
+		case "":
+			continue
+		case "_measurement", "_field", "time":
+			return ErrTagKeyReserved
 		}
 
 		e.header = append(e.header, ',')

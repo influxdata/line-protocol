@@ -68,4 +68,8 @@ var (
 
 	// ErrNoFields tells us that there were no serializable fields in the line/metric.
 	ErrNoFields = &MetricError{"no serializable fields"}
+
+	// ErrTagKeyReserved tells us that the tag key attempting to be serialized is reserved
+	// i.e. one of "_measurement", "_field" or "time".
+	ErrTagKeyReserved = &MetricError{"tag key is reserved"}
 )
