@@ -53,43 +53,6 @@ func (m *MockMetric) AddField(k string, v interface{}) {
 	})
 }
 
-func convertField(v interface{}) interface{} {
-	switch v := v.(type) {
-	case float64:
-		return v
-	case int64:
-		return v
-	case string:
-		return v
-	case bool:
-		return v
-	case int:
-		return int64(v)
-	case uint:
-		return uint64(v)
-	case uint64:
-		return uint64(v)
-	case []byte:
-		return string(v)
-	case int32:
-		return int64(v)
-	case int16:
-		return int64(v)
-	case int8:
-		return int64(v)
-	case uint32:
-		return uint64(v)
-	case uint16:
-		return uint64(v)
-	case uint8:
-		return uint64(v)
-	case float32:
-		return float64(v)
-	default:
-		return nil
-	}
-}
-
 func NewMockMetric(name string,
 	tags map[string]string,
 	fields map[string]interface{},
