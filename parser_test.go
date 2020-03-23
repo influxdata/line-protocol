@@ -2,14 +2,12 @@ package protocol
 
 import (
 	"bytes"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
 func MustMetric(v Metric, err error) Metric {
@@ -910,7 +908,7 @@ func TestStreamParserErrorString(t *testing.T) {
 
 // RequireMetricEqual halts the test with an error if the metrics are not
 // equal.
-func RequireMetricEqual(t *testing.T, expected, actual Metric, opts ...cmp.Option) {
+func RequireMetricEqual(t *testing.T, expected, actual Metric) {
 	t.Helper()
 
 	var lhs, rhs *metricDiff
@@ -921,9 +919,8 @@ func RequireMetricEqual(t *testing.T, expected, actual Metric, opts ...cmp.Optio
 		rhs = newMetricDiff(actual)
 	}
 
-	opts = append(opts, cmpopts.EquateNaNs())
-	if diff := cmp.Diff(lhs, rhs, opts...); diff != "" {
-		t.Fatalf("Metric\n--- expected\n+++ actual\n%s", diff)
+	if !reflect.DeepEqual(lhs, rhs) {
+		t.Fatalf("Metric %v, want=%v", rhs, lhs)
 	}
 }
 
