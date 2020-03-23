@@ -643,10 +643,7 @@ func TestParser(t *testing.T) {
 
 			require.Equal(t, len(tt.metrics), len(metrics))
 			for i, expected := range tt.metrics {
-				require.Equal(t, expected.Name(), metrics[i].Name())
-				require.Equal(t, expected.TagList(), metrics[i].TagList())
-				require.Equal(t, expected.FieldList(), metrics[i].FieldList())
-				require.Equal(t, expected.Time(), metrics[i].Time())
+				RequireMetricEqual(t, expected, metrics[i])
 			}
 		})
 	}
