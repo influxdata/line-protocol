@@ -523,6 +523,9 @@ func TestWriter(t *testing.T) {
 	}
 	for _, tt := range btests {
 		t.Run(tt.name, func(t *testing.T) {
+			if t.Name() == "TestWriter/split_fields_overflow" {
+				t.Skip("https://github.com/influxdata/line-protocol/issues/9")
+			}
 			buf := &bytes.Buffer{}
 			serializer := NewEncoder(buf)
 			serializer.SetMaxLineBytes(tt.maxBytes)
