@@ -264,15 +264,6 @@ func (t TokenType) String() string {
 	}
 }
 
-type Token struct {
-	Name  TokenType
-	Value []byte
-}
-
-func (t Token) String() string {
-	return fmt.Sprintf("(%s %q)", t.Name, t.Value)
-}
-
 type Result struct {
 	Name  TokenType
 	Value []byte

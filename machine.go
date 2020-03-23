@@ -12,7 +12,8 @@ var (
 	ErrTagParse       = errors.New("expected tag")
 	ErrTimestampParse = errors.New("expected timestamp")
 	ErrParse          = errors.New("parse error")
-	EOF               = errors.New("EOF")
+	//lint:ignore ST1012 not needed
+	EOF = errors.New("EOF")
 )
 
 //line plugins/parsers/influx/machine.go.rl:310
