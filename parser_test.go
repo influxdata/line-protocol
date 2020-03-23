@@ -10,7 +10,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/stretchr/testify/require"
 )
 
 func MustMetric(v Metric, err error) Metric {
@@ -638,9 +637,17 @@ func TestParser(t *testing.T) {
 			}
 
 			metrics, err := parser.Parse(tt.input)
-			require.Equal(t, tt.err, err)
+			if (err != nil) != (tt.err != nil) {
+				t.Errorf("unexpected error difference: %v, want = %v", err, tt.err)
+				return
+			} else if tt.err != nil && err.Error() != tt.err.Error() {
+				t.Errorf("unexpected error difference: %v, want = %v", err, tt.err)
+			}
 
-			require.Equal(t, len(tt.metrics), len(metrics))
+			if got, want := len(metrics), len(tt.metrics); got != want {
+				t.Errorf("unexpected metric length difference: %d, want = %d", got, want)
+			}
+
 			for i, expected := range tt.metrics {
 				RequireMetricEqual(t, expected, metrics[i])
 			}
@@ -679,7 +686,9 @@ func TestStreamParser(t *testing.T) {
 					if err == EOF {
 						break
 					}
-					require.Equal(t, tt.err, err)
+					if (err != nil) == (tt.err != nil) && err.Error() != tt.err.Error() {
+						t.Errorf("unexpected error difference: %v, want = %v", err, tt.err)
+					}
 					break
 				}
 
@@ -756,12 +765,37 @@ func TestSeriesParser(t *testing.T) {
 			}
 
 			metrics, err := parser.Parse(tt.input)
-			require.Equal(t, tt.err, err)
 
-			require.Equal(t, len(tt.metrics), len(metrics))
+			if (err != nil) != (tt.err != nil) {
+				t.Errorf("unexpected error difference: %v, want = %v", err, tt.err)
+				return
+			} else if tt.err != nil && err.Error() != tt.err.Error() {
+				t.Errorf("unexpected error difference: %v, want = %v", err, tt.err)
+			}
+
+			if got, want := len(metrics), len(tt.metrics); got != want {
+				t.Errorf("unexpected metric length difference: %d, want = %d", got, want)
+			}
+
 			for i, expected := range tt.metrics {
-				require.Equal(t, expected.Name(), metrics[i].Name())
-				require.Equal(t, expected.TagList(), metrics[i].TagList())
+				if got, want := metrics[i].Name(), expected.Name(); got != want {
+					t.Errorf("unexpected metric name difference: %v, want = %v", got, want)
+				}
+				if got, want := len(metrics[i].TagList()), len(expected.TagList()); got != want {
+					t.Errorf("unexpected tag length difference: %d, want = %d", got, want)
+					break
+				}
+
+				got := metrics[i].TagList()
+				want := expected.TagList()
+				for i := range got {
+					if got[i].Key != want[i].Key {
+						t.Errorf("unexpected tag key difference: %v, want = %v", got[i].Key, want[i].Key)
+					}
+					if got[i].Value != want[i].Value {
+						t.Errorf("unexpected tag key difference: %v, want = %v", got[i].Value, want[i].Value)
+					}
+				}
 			}
 		})
 	}
@@ -801,7 +835,9 @@ func TestParserErrorString(t *testing.T) {
 			parser := NewParser(handler)
 
 			_, err := parser.Parse(tt.input)
-			require.Equal(t, tt.errString, err.Error())
+			if err.Error() != tt.errString {
+				t.Errorf("unexpected error difference: %v, want = %v", err.Error(), tt.errString)
+			}
 		})
 	}
 }
@@ -859,9 +895,14 @@ func TestStreamParserErrorString(t *testing.T) {
 				}
 			}
 
-			require.Equal(t, len(tt.errs), len(errs))
+			if got, want := len(errs), len(tt.errs); got != want {
+				t.Errorf("unexpected error length difference: %d, want = %d", got, want)
+			}
+
 			for i, err := range errs {
-				require.Equal(t, tt.errs[i], err.Error())
+				if err.Error() != tt.errs[i] {
+					t.Errorf("unexpected error difference: %v, want = %v", err.Error(), tt.errs[i])
+				}
 			}
 		})
 	}

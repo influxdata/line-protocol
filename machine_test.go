@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	protocol "github.com/influxdata/line-protocol"
-	"github.com/stretchr/testify/require"
 )
 
 type TestingHandler struct {
@@ -1700,7 +1699,16 @@ func TestMachine(t *testing.T) {
 			}
 
 			results := handler.Results()
-			require.Equal(t, tt.results, results)
+
+			if len(tt.results) != len(results) {
+				t.Errorf("unexpected difference in result lengths = %d, want %v", len(tt.results), len(results))
+				return
+			}
+			for i := range tt.results {
+				if tt.results[i].String() != results[i].String() {
+					t.Errorf("Machine.Results() = %v, want %v", results, tt.results)
+				}
+			}
 		})
 	}
 }
@@ -1776,8 +1784,13 @@ func TestMachinePosition(t *testing.T) {
 				}
 			}
 
-			require.Equal(t, tt.lineno, fsm.LineNumber(), "lineno")
-			require.Equal(t, tt.column, fsm.Column(), "column")
+			if tt.lineno != fsm.LineNumber() {
+				t.Errorf("unexpected difference in line number: %d, want = %d", tt.lineno, fsm.LineNumber())
+			}
+
+			if tt.column != fsm.Column() {
+				t.Errorf("unexpected difference in column number: %d, want = %d", tt.column, fsm.Column())
+			}
 		})
 	}
 }
@@ -1901,7 +1914,15 @@ func TestSeriesMachine(t *testing.T) {
 			}
 
 			results := handler.Results()
-			require.Equal(t, tt.results, results)
+			if len(tt.results) != len(results) {
+				t.Errorf("unexpected difference in result lengths = %d, want %v", len(tt.results), len(results))
+				return
+			}
+			for i := range tt.results {
+				if tt.results[i].String() != results[i].String() {
+					t.Errorf("Machine.Results() = %v, want %v", results, tt.results)
+				}
+			}
 		})
 	}
 }
@@ -2105,7 +2126,15 @@ func TestHandlerErrorRecovery(t *testing.T) {
 			}
 
 			results := tt.handler.Results()
-			require.Equal(t, tt.results, results)
+			if len(tt.results) != len(results) {
+				t.Errorf("unexpected difference in result lengths = %d, want %v", len(tt.results), len(results))
+				return
+			}
+			for i := range tt.results {
+				if tt.results[i].String() != results[i].String() {
+					t.Errorf("Machine.Results() = %v, want %v", results, tt.results)
+				}
+			}
 		})
 	}
 }
@@ -2144,7 +2173,15 @@ func TestStreamMachine(t *testing.T) {
 			}
 
 			results := handler.Results()
-			require.Equal(t, tt.results, results)
+			if len(tt.results) != len(results) {
+				t.Errorf("unexpected difference in result lengths = %d, want %v", len(tt.results), len(results))
+				return
+			}
+			for i := range tt.results {
+				if tt.results[i].String() != results[i].String() {
+					t.Errorf("Machine.Results() = %v, want %v", results, tt.results)
+				}
+			}
 		})
 	}
 }
@@ -2180,8 +2217,13 @@ func TestStreamMachinePosition(t *testing.T) {
 				}
 			}
 
-			require.Equal(t, tt.lineno, fsm.LineNumber(), "lineno")
-			require.Equal(t, tt.column, fsm.Column(), "column")
+			if tt.lineno != fsm.LineNumber() {
+				t.Errorf("unexpected difference in line number: %d, want = %d", tt.lineno, fsm.LineNumber())
+			}
+
+			if tt.column != fsm.Column() {
+				t.Errorf("unexpected difference in column number: %d, want = %d", tt.column, fsm.Column())
+			}
 		})
 	}
 }
