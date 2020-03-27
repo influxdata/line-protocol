@@ -29,6 +29,7 @@ type Encoder struct {
 	header           []byte
 	footer           []byte
 	pair             []byte
+	precision        time.Duration
 }
 
 // SetMaxLineBytes sets a maximum length for a line, Encode will error if the generated line is longer
@@ -55,6 +56,12 @@ func (e *Encoder) FailOnFieldErr(s bool) {
 	e.failOnFieldError = s
 }
 
+// SetPrecision sets time precision for writes
+// Default is nanoseconds precision
+func (e *Encoder) SetPrecision(p time.Duration) {
+	e.precision = p
+}
+
 // NewEncoder gives us an encoder that marshals to a writer in influxdb line protocol
 // as defined by:
 // https://docs.influxdata.com/influxdb/v1.5/write_protocols/line_protocol_reference/
@@ -65,6 +72,7 @@ func NewEncoder(w io.Writer) *Encoder {
 		footer:    make([]byte, 0, 128),
 		pair:      make([]byte, 0, 128),
 		fieldList: make([]*Field, 0, 16),
+		precision: time.Nanosecond,
 	}
 }
 
@@ -276,7 +284,16 @@ func (e *Encoder) buildFooter(t time.Time) {
 	e.footer = e.footer[:0]
 	if !t.IsZero() {
 		e.footer = append(e.footer, ' ')
-		e.footer = strconv.AppendInt(e.footer, t.UnixNano(), 10)
+		switch e.precision {
+		case time.Microsecond:
+			e.footer = strconv.AppendInt(e.footer, t.UnixNano()/1000, 10)
+		case time.Millisecond:
+			e.footer = strconv.AppendInt(e.footer, t.UnixNano()/1000000, 10)
+		case time.Second:
+			e.footer = strconv.AppendInt(e.footer, t.Unix(), 10)
+		default:
+			e.footer = strconv.AppendInt(e.footer, t.UnixNano(), 10)
+		}
 	}
 	e.footer = append(e.footer, '\n')
 }

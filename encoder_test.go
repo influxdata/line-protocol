@@ -94,6 +94,7 @@ var tests = []struct {
 	output         []byte
 	failOnFieldErr bool
 	err            error
+	precision      time.Duration
 }{
 	{
 		name: "minimal",
@@ -471,6 +472,62 @@ var tests = []struct {
 		failOnFieldErr: true,
 		err:            ErrIsNaN,
 	},
+	{
+		name: "explicit nanoseconds precision",
+		input: NewMockMetric(
+			"cpu",
+			map[string]string{},
+			map[string]interface{}{
+				"x": 3,
+				"y": 42.3,
+			},
+			time.Unix(123456789, 123456789),
+		),
+		precision: time.Nanosecond,
+		output:    []byte("cpu x=3i,y=42.3 123456789123456789\n"),
+	},
+	{
+		name: "microseconds precision",
+		input: NewMockMetric(
+			"cpu",
+			map[string]string{},
+			map[string]interface{}{
+				"x": 3,
+				"y": 42.3,
+			},
+			time.Unix(123456789, 123456789),
+		),
+		precision: time.Microsecond,
+		output:    []byte("cpu x=3i,y=42.3 123456789123456\n"),
+	},
+	{
+		name: "milliseconds precision",
+		input: NewMockMetric(
+			"cpu",
+			map[string]string{},
+			map[string]interface{}{
+				"x": 3,
+				"y": 42.3,
+			},
+			time.Unix(123456789, 123456789),
+		),
+		precision: time.Millisecond,
+		output:    []byte("cpu x=3i,y=42.3 123456789123\n"),
+	},
+	{
+		name: "seconds precision",
+		input: NewMockMetric(
+			"cpu",
+			map[string]string{},
+			map[string]interface{}{
+				"x": 3,
+				"y": 42.3,
+			},
+			time.Unix(123456789, 123456789),
+		),
+		precision: time.Second,
+		output:    []byte("cpu x=3i,y=42.3 123456789\n"),
+	},
 }
 
 func TestEncoder(t *testing.T) {
@@ -482,6 +539,7 @@ func TestEncoder(t *testing.T) {
 			serializer.SetFieldSortOrder(SortFields)
 			serializer.SetFieldTypeSupport(tt.typeSupport)
 			serializer.FailOnFieldErr(tt.failOnFieldErr)
+			serializer.SetPrecision(tt.precision)
 			_, err := serializer.Encode(tt.input)
 			if tt.err != err {
 				t.Fatalf("expected error %v, but got %v", tt.err, err)
@@ -508,6 +566,7 @@ func TestWriter(t *testing.T) {
 		fields         args
 		err            error
 		output         []byte
+		precision      time.Duration
 	}, len(tests))
 	for i, tt := range tests {
 		btests[i].name = tt.name
@@ -516,6 +575,7 @@ func TestWriter(t *testing.T) {
 		btests[i].failOnFieldErr = tt.failOnFieldErr
 		btests[i].err = tt.err
 		btests[i].output = tt.output
+		btests[i].precision = tt.precision
 		btests[i].fields.name = []byte(tt.input.Name())
 		btests[i].fields.ts = tt.input.Time()
 		btests[i].fields.fieldKeys, btests[i].fields.fieldVals = fieldsToBytes(tt.input.FieldList())
@@ -532,6 +592,7 @@ func TestWriter(t *testing.T) {
 			serializer.SetFieldSortOrder(SortFields)
 			serializer.SetFieldTypeSupport(tt.typeSupport)
 			serializer.FailOnFieldErr(tt.failOnFieldErr)
+			serializer.SetPrecision(tt.precision)
 			_, err := serializer.Write(tt.fields.name, tt.fields.ts, tt.fields.tagKeys, tt.fields.tagVals, tt.fields.fieldKeys, tt.fields.fieldVals)
 			if tt.err != err {
 				t.Fatalf("expected error %v, but got %v", tt.err, err)
