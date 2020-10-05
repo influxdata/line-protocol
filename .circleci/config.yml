@@ -1,0 +1,13 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: circleci/golang:1.15.2
+
+    working_directory: /go/src/github.com/influxdata/line-protocol
+    steps:
+      - checkout
+      - run: go get honnef.co/go/tools/...
+      - run: go test -v ./...
+      - run: go vet -v ./...
+      - run: staticcheck ./...
