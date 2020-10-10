@@ -540,9 +540,12 @@ func TestEncoder(t *testing.T) {
 			serializer.SetFieldTypeSupport(tt.typeSupport)
 			serializer.FailOnFieldErr(tt.failOnFieldErr)
 			serializer.SetPrecision(tt.precision)
-			_, err := serializer.Encode(tt.input)
+			i, err := serializer.Encode(tt.input)
 			if tt.err != err {
 				t.Fatalf("expected error %v, but got %v", tt.err, err)
+			}
+			if i != len(buf.Bytes()) {
+				t.Fatalf("expected i: %v, but got: %v", len(buf.Bytes()), i)
 			}
 			if string(tt.output) != buf.String() {
 				t.Fatalf("expected output %v, but got %v", tt.output, buf.String())
