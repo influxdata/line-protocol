@@ -43,7 +43,7 @@ var sectionCheckers = []func(c *qt.C, tok *Tokenizer, expect Point){
 		}
 
 		c.Assert(err, qt.IsNil)
-		c.Assert(string(m), qt.Equals, expect.Measurement)
+		c.Assert(string(m), qt.Equals, expect.Measurement, qt.Commentf("runes: %x", []rune(string(m))))
 	},
 	TagSection: func(c *qt.C, tok *Tokenizer, expect Point) {
 		var tags []TagKeyValue
@@ -57,7 +57,7 @@ var sectionCheckers = []func(c *qt.C, tok *Tokenizer, expect Point){
 				})
 				continue
 			}
-			if key == nil && value == nil {
+			if key == nil {
 				break
 			}
 			tags = append(tags, TagKeyValue{
@@ -79,7 +79,7 @@ var sectionCheckers = []func(c *qt.C, tok *Tokenizer, expect Point){
 				})
 				continue
 			}
-			if key == nil && value == nil && kind == Unknown {
+			if key == nil {
 				break
 			}
 			fields = append(fields, FieldKeyValue{
@@ -250,6 +250,42 @@ next§ §x=1§`,
 		}},
 		TimeError: `invalid timestamp ("FieldOne=123.45")`,
 	}},
+}, {
+	testName: "missing timestamp",
+	text:     "b§ §f=1§",
+	expect: []Point{{
+		Measurement: "b",
+		Fields: []FieldKeyValue{{
+			Key:   "f",
+			Kind:  Float,
+			Value: "1",
+		}},
+		Time: "",
+	}},
+}, {
+	testName: "missing timestamp with newline",
+	text:     "b§ §f=1§\n",
+	expect: []Point{{
+		Measurement: "b",
+		Fields: []FieldKeyValue{{
+			Key:   "f",
+			Kind:  Float,
+			Value: "1",
+		}},
+		Time: "",
+	}},
+}, {
+	testName: "field-with-space-and-no-timestamp",
+	text:     "9§ §f=-7 §",
+	expect: []Point{{
+		Measurement: "9",
+		Fields: []FieldKeyValue{{
+			Key:   "f",
+			Kind:  Float,
+			Value: "-7",
+		}},
+		Time: "",
+	}},
 }}
 
 func TestTokenizer(t *testing.T) {
@@ -261,11 +297,13 @@ func TestTokenizer(t *testing.T) {
 			i := 0
 			for tok.Next() {
 				if i >= len(test.expect) {
-					c.Fatalf("too many points found")
+					c.Errorf("too many points found")
 				}
 				for sect, checkSection := range sectionCheckers {
 					c.Logf("checking %v", Section(sect))
-					checkSection(c, tok, test.expect[i])
+					if i < len(test.expect) {
+						checkSection(c, tok, test.expect[i])
+					}
 				}
 				i++
 			}
@@ -387,12 +425,11 @@ func TestTokenizerSkipSection(t *testing.T) {
 }
 
 func removeTestSeparators(s string) string {
-	return strings.Map(func(r rune) rune {
-		if r == '¶' || r == '§' {
-			return -1
-		}
-		return r
-	}, s)
+	// Note: we can't use strings.Map here because we
+	// need to preserve invalid utf-8 sequences.
+	s = strings.Replace(s, "¶", "", -1)
+	s = strings.Replace(s, "§", "", -1)
+	return s
 }
 
 var tokenizerTakeTests = []struct {

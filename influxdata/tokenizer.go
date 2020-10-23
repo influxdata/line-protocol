@@ -3,6 +3,7 @@ package influxdata
 import (
 	"fmt"
 	"io"
+	"time"
 )
 
 const (
@@ -305,19 +306,32 @@ func (t *Tokenizer) NextFieldBytes() (key []byte, kind ValueKind, value []byte, 
 		t.advance(1)
 		return fieldKey, fieldKind, fieldVal, nil
 	}
-	if !fieldSeparatorSpace.get(nextc) {
+	if !whitespace.get(nextc) {
 		return nil, Unknown, nil, t.syntaxErrorf("unexpected character %q after field", nextc)
 	}
 	t.take(fieldSeparatorSpace)
-	if !t.ensure(1) {
-		return fieldKey, fieldKind, fieldVal, nil
-	}
-	if t.at(0) == '\n' {
+	if !t.ensure(1) || t.at(0) == '\n' {
 		t.section = endSection
 		return fieldKey, fieldKind, fieldVal, nil
 	}
 	t.section = TimeSection
 	return fieldKey, fieldKind, fieldVal, nil
+}
+
+// NextField is a wrapper around NextFieldBytes that parses
+// the field value. Note: the returned value is only valid
+// until the next call method call on Tokenizer because when
+// it's a string, it refers to an internal buffer.
+func (t *Tokenizer) NextField() (key []byte, val Value, err error) {
+	key, kind, data, err := t.NextFieldBytes()
+	if err != nil || key == nil {
+		return nil, Value{}, err
+	}
+	v, err := ParseValue(kind, data)
+	if err != nil {
+		return nil, Value{}, fmt.Errorf("cannot parse value for field key %q: %v", key, err)
+	}
+	return key, v, nil
 }
 
 // TimeBytes returns the timestamp of the entry as a byte slice.
@@ -355,6 +369,27 @@ func (t *Tokenizer) TimeBytes() ([]byte, error) {
 	t.advance(1)
 	t.section = endSection
 	return timeBytes, nil
+}
+
+// Time is a wrapper around TimeBytes that returns the timestamp
+// assuming the given precision.
+func (t *Tokenizer) Time(prec Precision, defaultTime time.Time) (time.Time, error) {
+	data, err := t.TimeBytes()
+	if err != nil {
+		return time.Time{}, err
+	}
+	if data == nil {
+		return defaultTime.Truncate(prec.Duration()), nil
+	}
+	ts, err := parseIntBytes(data, 10, 64)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid timestamp %q", data)
+	}
+	ns, ok := prec.asNanoseconds(ts)
+	if !ok {
+		return time.Time{}, fmt.Errorf("timestamp %s%s out of range", data, prec)
+	}
+	return time.Unix(0, ns), nil
 }
 
 func (t *Tokenizer) consumeLine() {
