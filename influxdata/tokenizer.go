@@ -54,6 +54,9 @@ type Tokenizer struct {
 	// is known to be all the data that's available.
 	complete bool
 
+	// stats records features about the data that's being read.
+	stats Stats
+
 	// section holds the current section of the entry that's being
 	// read.
 	section Section
@@ -110,9 +113,13 @@ func NewTokenizerAtSection(buf []byte, section Section) *Tokenizer {
 	// because NextTag assumes that it's positioned at the start
 	// of a valid non-empty tag section. This saves further special cases
 	// below to avoid accepting an entry with a comma followed by whitespace.
-	tok.take(fieldSeparatorSpace)
+	tok.takeFieldSpace()
 	tok.section = FieldSection
 	return tok
+}
+
+func (t *Tokenizer) takeFieldSpace() {
+	t.takeStats(fieldSeparatorSpace, fieldSpaceStats)
 }
 
 // Next advances to the next entry, and reports whether there is an
@@ -141,7 +148,16 @@ func (t *Tokenizer) Next() bool {
 	t.advanceToSection(endSection)
 	t.skipEmptyLines()
 	t.section = MeasurementSection
+	t.reset()
 	return t.ensure(1)
+}
+
+// Stats returns all the flags that have been set since the
+// last time Stats was called.
+func (t *Tokenizer) Stats() Stats {
+	s := t.stats
+	t.stats = 0
+	return s
 }
 
 // Err returns any I/O error encountered when reading
@@ -165,7 +181,7 @@ func (t *Tokenizer) Measurement() ([]byte, error) {
 	// empty/comment lines too. Maybe that's a bad idea.
 	t.skipEmptyLines()
 	t.reset()
-	measure := t.takeEsc(measurementChars, &measurementEscapes.revTable)
+	measure := t.takeEscUnquotedStats(measurementChars, &measurementEscapes.revTable)
 	if len(measure) == 0 {
 		return nil, t.syntaxErrorf("no measurement name found")
 	}
@@ -187,11 +203,11 @@ func (t *Tokenizer) NextTag() (key, value []byte, err error) {
 		return nil, nil, nil
 	}
 	if t.ensure(1) && fieldSeparatorSpace.get(t.at(0)) {
-		t.take(fieldSeparatorSpace)
+		t.takeFieldSpace()
 		t.section = FieldSection
 		return nil, nil, nil
 	}
-	tagKey := t.takeEsc(tagKeyChars, &tagKeyEscapes.revTable)
+	tagKey := t.takeEscUnquotedStats(tagKeyChars, &tagKeyEscapes.revTable)
 	if len(tagKey) == 0 {
 		return nil, nil, t.syntaxErrorf("empty tag name")
 	}
@@ -199,7 +215,7 @@ func (t *Tokenizer) NextTag() (key, value []byte, err error) {
 		return nil, nil, t.syntaxErrorf("expected '=' after tag key %q, but got %q instead", tagKey, t.at(0))
 	}
 	t.advance(1)
-	tagVal := t.takeEsc(tagValChars, &tagValEscapes.revTable)
+	tagVal := t.takeEscUnquotedStats(tagValChars, &tagValEscapes.revTable)
 	if len(tagVal) == 0 {
 		return nil, nil, t.syntaxErrorf("expected tag value after tag key %q, but none found", tagKey)
 	}
@@ -253,7 +269,7 @@ func (t *Tokenizer) NextFieldBytes() (key []byte, kind ValueKind, value []byte, 
 	} else if !ok {
 		return nil, Unknown, nil, nil
 	}
-	fieldKey := t.takeEsc(fieldKeyChars, &fieldKeyEscapes.revTable)
+	fieldKey := t.takeEscUnquotedStats(fieldKeyChars, &fieldKeyEscapes.revTable)
 	if len(fieldKey) == 0 {
 		return nil, Unknown, nil, t.syntaxErrorf("expected field key but none found")
 	}
@@ -273,8 +289,10 @@ func (t *Tokenizer) NextFieldBytes() (key []byte, kind ValueKind, value []byte, 
 	case '"':
 		// Skip leading quote.
 		t.advance(1)
-		fieldVal = t.takeEsc(fieldStringValChars, &fieldStringValEscapes.revTable)
 		fieldKind = String
+		var stats Stats
+		fieldVal, stats = t.takeEscStats(fieldStringValChars, &fieldStringValEscapes.revTable, quotedStats, quotedEscStats)
+		t.stats |= stats
 		if !t.ensure(1) {
 			return nil, Unknown, nil, t.syntaxErrorf("expected closing quote for string field value, found end of input")
 		}
@@ -300,6 +318,7 @@ func (t *Tokenizer) NextFieldBytes() (key []byte, kind ValueKind, value []byte, 
 			fieldKind = Float
 		}
 	default:
+		t.stats |= 1 << StatUnknownFieldType
 		fieldVal = t.take(fieldValChars)
 		fieldKind = Unknown
 	}
@@ -315,7 +334,7 @@ func (t *Tokenizer) NextFieldBytes() (key []byte, kind ValueKind, value []byte, 
 	if !whitespace.get(nextc) {
 		return nil, Unknown, nil, t.syntaxErrorf("unexpected character %q after field", nextc)
 	}
-	t.take(fieldSeparatorSpace)
+	t.takeFieldSpace()
 	if !t.ensure(1) || t.at(0) == '\n' {
 		t.section = endSection
 		return fieldKey, fieldKind, fieldVal, nil
@@ -363,7 +382,7 @@ func (t *Tokenizer) TimeBytes() ([]byte, error) {
 		t.take(notNewline)
 		return nil, t.syntaxErrorf("invalid timestamp (%q)", t.buf[t.r0+start:t.r1])
 	}
-	t.take(fieldSeparatorSpace)
+	t.takeFieldSpace()
 	if !t.ensure(1) {
 		t.section = endSection
 		return timeBytes, nil
@@ -398,6 +417,8 @@ func (t *Tokenizer) Time(prec Precision, defaultTime time.Time) (time.Time, erro
 	return time.Unix(0, ns), nil
 }
 
+// consumeLine consumes an entire line. This is used to recover
+// from syntax errors.
 func (t *Tokenizer) consumeLine() {
 	t.take(notNewline)
 	t.reset()
@@ -410,10 +431,11 @@ func (t *Tokenizer) consumeLine() {
 
 func (t *Tokenizer) skipEmptyLines() {
 	for {
-		t.take(fieldSeparatorSpace)
+		t.takeFieldSpace()
 		switch t.at(0) {
 		case '#':
 			// Found a comment.
+			t.stats |= 1 << StatComment
 			t.take(notNewline)
 			if t.at(0) != '\n' {
 				return
@@ -498,13 +520,42 @@ func (t *Tokenizer) consumeSection() error {
 	}
 }
 
+// takeEscUnquotedStats is like takeEsc but updates stats for measurements, tag keys and tag values.
+func (t *Tokenizer) takeEscUnquotedStats(set *byteSet, escapeTable *[256]byte) []byte {
+	data, stats := t.takeEscStats(set, escapeTable, unquotedStats, unquotedEscStats)
+	if len(data) > 0 && data[0] == '"' {
+		stats |= 1 << StatQuoteAtStart
+	}
+	if (stats & (1 << StatBackslashBackslash)) != 0 {
+		// There's a double backslash somewhere: see whether there's
+		// one followed by a separator (an awkard edge case).
+		// Note: the backslash before the separator has already
+		// been removed by unescaping, so we only need to
+		// find a single backslash.
+		for i := 0; i < len(data)-1; i++ {
+			if data[i] == '\\' && !set[data[i+1]] {
+				stats |= 1 << StatDoubleBackslashSeparator
+				break
+			}
+		}
+	}
+	t.stats |= stats
+	return data
+}
+
 // take returns the next slice of bytes that are in the given set
 // reading more data as needed. It updates t.r1.
 func (t *Tokenizer) take(set *byteSet) []byte {
+	return t.takeStats(set, nil)
+}
+
+// takeStats is like take but updates t.stats according to stats.
+func (t *Tokenizer) takeStats(set *byteSet, stats *statBytes) []byte {
 	// Note: use a relative index for start because absolute
 	// indexes aren't stable (the contents of the buffer can be
 	// moved when reading more data).
 	start := t.r1 - t.r0
+	var bstats byteStatFlags
 outer:
 	for {
 		if !t.ensure(1) {
@@ -516,9 +567,12 @@ outer:
 				t.r1 += i
 				break outer
 			}
+			bstats = stats.update(bstats, c)
+
 		}
 		t.r1 += len(buf)
 	}
+	t.stats |= stats.stats(bstats)
 	return t.buf[t.r0+start : t.r1]
 }
 
@@ -528,6 +582,13 @@ outer:
 // It returns the unescaped string (unless t.skipping is true, in which
 // case it doesn't need to go to the trouble of unescaping it).
 func (t *Tokenizer) takeEsc(set *byteSet, escapeTable *[256]byte) []byte {
+	data, _ := t.takeEscStats(set, escapeTable, nil, nil)
+	return data
+}
+
+// takeEscStats is like takeEsc except that it updates t.stats according to stats (for normal characters)
+// and escStats (for any characters preceded by a \ character).
+func (t *Tokenizer) takeEscStats(set *byteSet, escapeTable *[256]byte, stats, escStats *statBytes) ([]byte, Stats) {
 	// start holds the offset from r0 of the start of the taken slice.
 	// Note that we can't use t.r1 directly, because the offsets can change
 	// when the buffer is grown.
@@ -536,6 +597,8 @@ func (t *Tokenizer) takeEsc(set *byteSet, escapeTable *[256]byte) []byte {
 	// startUnesc holds the offset from t0 of the start of the most recent
 	// unescaped segment.
 	startUnesc := start
+
+	var bstats, escbstats byteStatFlags
 
 	// startEsc holds the index into r.escBuf of the start of the escape buffer.
 	startEsc := len(t.escBuf)
@@ -553,6 +616,7 @@ outer:
 					t.r1 += i
 					break outer
 				}
+				bstats = stats.update(bstats, c)
 				continue
 			}
 			if i+1 >= len(buf) {
@@ -569,6 +633,7 @@ outer:
 				// update buf to point to the correct buffer.
 				buf = t.buf[t.r1:]
 			}
+			escbstats = escStats.update(escbstats, buf[i+1])
 			replc := escapeTable[buf[i+1]]
 			if replc == 0 {
 				// The backslash doesn't precede a value escaped
@@ -586,13 +651,14 @@ outer:
 		// the loop, trying to acquire more.
 		t.r1 += len(buf)
 	}
+	statsFlags := stats.stats(bstats) | escStats.stats(escbstats)
 	if len(t.escBuf) > startEsc {
 		// We've got an unescaped result: append any remaining unescaped bytes
 		// and return the relevant portion of the escape buffer.
 		t.escBuf = append(t.escBuf, t.buf[startUnesc+t.r0:t.r1]...)
-		return t.escBuf[startEsc:]
+		return t.escBuf[startEsc:], statsFlags
 	}
-	return t.buf[t.r0+start : t.r1]
+	return t.buf[t.r0+start : t.r1], statsFlags
 }
 
 // at returns the byte at i bytes after the current read position.

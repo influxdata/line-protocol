@@ -111,8 +111,9 @@ var tokenizerTests = []struct {
 	// text holds the text to be tokenized.
 	// sections are separated by § characters.
 	// entries are separated by ¶ characters.
-	text   string
-	expect []Point
+	text        string
+	expect      []Point
+	expectStats Stats
 }{{
 	testName: "all-fields-present-no-escapes",
 	text: `
@@ -151,6 +152,7 @@ var tokenizerTests = []struct {
 		}},
 		Time: "1602841605822791506",
 	}},
+	expectStats: mkStats(StatComment),
 }, {
 	testName: "multiple-entries",
 	text: `
@@ -185,6 +187,7 @@ var tokenizerTests = []struct {
 		}},
 		Time: "1602841605822792000",
 	}},
+	expectStats: mkStats(StatComment),
 }, {
 	testName: "escaped-values",
 	text: `
@@ -209,6 +212,7 @@ var tokenizerTests = []struct {
 		}},
 		Time: "1602841605822791506",
 	}},
+	expectStats: mkStats(StatStrLiteralNewline, StatComment),
 }, {
 	testName: "missing-quotes",
 	text:     `TestBucket§ §FieldOne=Happy,FieldTwo=sad§`,
@@ -224,6 +228,7 @@ var tokenizerTests = []struct {
 			Value: "sad",
 		}},
 	}},
+	expectStats: mkStats(StatUnknownFieldType),
 }, {
 	testName: "trailing-comma-after-measurement",
 	text: `TestBucket,§ §FieldOne=Happy§¶
@@ -286,6 +291,467 @@ next§ §x=1§`,
 		}},
 		Time: "",
 	}},
+}, {
+	testName: "measurement-with-leading-quote",
+	text:     `"x x=1`,
+	expect: []Point{{
+		Measurement: `"x`,
+		Fields: []FieldKeyValue{{
+			Key:   "x",
+			Kind:  Float,
+			Value: "1",
+		}},
+	}},
+	expectStats: mkStats(StatQuoteAtStart),
+}, {
+	testName: "tag-key-with-leading-quote",
+	text:     `x,"t=x x=1`,
+	expect: []Point{{
+		Measurement: `x`,
+		Tags: []TagKeyValue{{
+			Key:   `"t`,
+			Value: "x",
+		}},
+		Fields: []FieldKeyValue{{
+			Key:   "x",
+			Kind:  Float,
+			Value: "1",
+		}},
+	}},
+	expectStats: mkStats(StatQuoteAtStart),
+}, {
+	testName: "tag-value-with-leading-quote",
+	text:     `x,t="x x=1`,
+	expect: []Point{{
+		Measurement: `x`,
+		Tags: []TagKeyValue{{
+			Key:   `t`,
+			Value: `"x`,
+		}},
+		Fields: []FieldKeyValue{{
+			Key:   "x",
+			Kind:  Float,
+			Value: "1",
+		}},
+	}},
+	expectStats: mkStats(StatQuoteAtStart),
+}, {
+	testName: "field-key-with-leading-quote",
+	text:     `x "x=1`,
+	expect: []Point{{
+		Measurement: `x`,
+		Fields: []FieldKeyValue{{
+			Key:   `"x`,
+			Kind:  Float,
+			Value: "1",
+		}},
+	}},
+	expectStats: mkStats(StatQuoteAtStart),
+}, {
+	testName: "measurement-with-backslash-n",
+	text:     `x\n x=1`,
+	expect: []Point{{
+		Measurement: `x\n`,
+		Fields: []FieldKeyValue{{
+			Key:   `x`,
+			Kind:  Float,
+			Value: "1",
+		}},
+	}},
+	expectStats: mkStats(StatBackslashN),
+}, {
+	testName: "tag-key-with-backslash-n",
+	text:     `x,t\n=x x=1`,
+	expect: []Point{{
+		Measurement: `x`,
+		Tags: []TagKeyValue{{
+			Key:   `t\n`,
+			Value: "x",
+		}},
+		Fields: []FieldKeyValue{{
+			Key:   "x",
+			Kind:  Float,
+			Value: "1",
+		}},
+	}},
+	expectStats: mkStats(StatBackslashN),
+}, {
+	testName: "tag-value-with-backslash-n",
+	text:     `x,t=x\n x=1`,
+	expect: []Point{{
+		Measurement: `x`,
+		Tags: []TagKeyValue{{
+			Key:   `t`,
+			Value: `x\n`,
+		}},
+		Fields: []FieldKeyValue{{
+			Key:   "x",
+			Kind:  Float,
+			Value: "1",
+		}},
+	}},
+	expectStats: mkStats(StatBackslashN),
+}, {
+	testName: "field-key-with-backslash-n",
+	text:     `x x\n=1`,
+	expect: []Point{{
+		Measurement: `x`,
+		Fields: []FieldKeyValue{{
+			Key:   `x\n`,
+			Kind:  Float,
+			Value: "1",
+		}},
+	}},
+	expectStats: mkStats(StatBackslashN),
+}, {
+	testName: "measurement-with-backslash-r",
+	text:     `x\r x=1`,
+	expect: []Point{{
+		Measurement: `x\r`,
+		Fields: []FieldKeyValue{{
+			Key:   `x`,
+			Kind:  Float,
+			Value: "1",
+		}},
+	}},
+	expectStats: mkStats(StatBackslashR),
+}, {
+	testName: "tag-key-with-backslash-r",
+	text:     `x,t\r=x x=1`,
+	expect: []Point{{
+		Measurement: `x`,
+		Tags: []TagKeyValue{{
+			Key:   `t\r`,
+			Value: "x",
+		}},
+		Fields: []FieldKeyValue{{
+			Key:   "x",
+			Kind:  Float,
+			Value: "1",
+		}},
+	}},
+	expectStats: mkStats(StatBackslashR),
+}, {
+	testName: "tag-value-with-backslash-r",
+	text:     `x,t=x\r x=1`,
+	expect: []Point{{
+		Measurement: `x`,
+		Tags: []TagKeyValue{{
+			Key:   `t`,
+			Value: `x\r`,
+		}},
+		Fields: []FieldKeyValue{{
+			Key:   "x",
+			Kind:  Float,
+			Value: "1",
+		}},
+	}},
+	expectStats: mkStats(StatBackslashR),
+}, {
+	testName: "field-key-with-backslash-r",
+	text:     `x x\r=1`,
+	expect: []Point{{
+		Measurement: `x`,
+		Fields: []FieldKeyValue{{
+			Key:   `x\r`,
+			Kind:  Float,
+			Value: "1",
+		}},
+	}},
+	expectStats: mkStats(StatBackslashR),
+}, {
+	testName: "measurement-with-backslash-t",
+	text:     `x\t x=1`,
+	expect: []Point{{
+		Measurement: `x\t`,
+		Fields: []FieldKeyValue{{
+			Key:   `x`,
+			Kind:  Float,
+			Value: "1",
+		}},
+	}},
+	expectStats: mkStats(StatBackslashT),
+}, {
+	testName: "tag-key-with-backslash-t",
+	text:     `x,t\t=x x=1`,
+	expect: []Point{{
+		Measurement: `x`,
+		Tags: []TagKeyValue{{
+			Key:   `t\t`,
+			Value: "x",
+		}},
+		Fields: []FieldKeyValue{{
+			Key:   "x",
+			Kind:  Float,
+			Value: "1",
+		}},
+	}},
+	expectStats: mkStats(StatBackslashT),
+}, {
+	testName: "tag-value-with-backslash-t",
+	text:     `x,t=x\t x=1`,
+	expect: []Point{{
+		Measurement: `x`,
+		Tags: []TagKeyValue{{
+			Key:   `t`,
+			Value: `x\t`,
+		}},
+		Fields: []FieldKeyValue{{
+			Key:   "x",
+			Kind:  Float,
+			Value: "1",
+		}},
+	}},
+	expectStats: mkStats(StatBackslashT),
+}, {
+	testName: "field-key-with-backslash-t",
+	text:     `x x\t=1`,
+	expect: []Point{{
+		Measurement: `x`,
+		Fields: []FieldKeyValue{{
+			Key:   `x\t`,
+			Kind:  Float,
+			Value: "1",
+		}},
+	}},
+	expectStats: mkStats(StatBackslashT),
+}, {
+	testName: "measurement-with-backslash-f",
+	text:     `x\f x=1`,
+	expect: []Point{{
+		Measurement: `x\f`,
+		Fields: []FieldKeyValue{{
+			Key:   `x`,
+			Kind:  Float,
+			Value: "1",
+		}},
+	}},
+	expectStats: mkStats(StatBackslashF),
+}, {
+	testName: "tag-key-with-backslash-f",
+	text:     `x,t\f=x x=1`,
+	expect: []Point{{
+		Measurement: `x`,
+		Tags: []TagKeyValue{{
+			Key:   `t\f`,
+			Value: "x",
+		}},
+		Fields: []FieldKeyValue{{
+			Key:   "x",
+			Kind:  Float,
+			Value: "1",
+		}},
+	}},
+	expectStats: mkStats(StatBackslashF),
+}, {
+	testName: "tag-value-with-backslash-f",
+	text:     `x,t=x\f x=1`,
+	expect: []Point{{
+		Measurement: `x`,
+		Tags: []TagKeyValue{{
+			Key:   `t`,
+			Value: `x\f`,
+		}},
+		Fields: []FieldKeyValue{{
+			Key:   "x",
+			Kind:  Float,
+			Value: "1",
+		}},
+	}},
+	expectStats: mkStats(StatBackslashF),
+}, {
+	testName: "field-key-with-backslash-f",
+	text:     `x x\f=1`,
+	expect: []Point{{
+		Measurement: `x`,
+		Fields: []FieldKeyValue{{
+			Key:   `x\f`,
+			Kind:  Float,
+			Value: "1",
+		}},
+	}},
+	expectStats: mkStats(StatBackslashF),
+}, {
+	testName: "measurement-with-non-printable-char",
+	text:     "x\x01 x=1",
+	expect: []Point{{
+		Measurement: "x\x01",
+		Fields: []FieldKeyValue{{
+			Key:   `x`,
+			Kind:  Float,
+			Value: "1",
+		}},
+	}},
+	expectStats: mkStats(StatNonPrintable),
+}, {
+	testName: "measurement-with-equals",
+	text:     "x= x=1",
+	expect: []Point{{
+		Measurement: "x=",
+		Fields: []FieldKeyValue{{
+			Key:   `x`,
+			Kind:  Float,
+			Value: "1",
+		}},
+	}},
+	expectStats: mkStats(StatMeasurementEquals),
+}, {
+	testName: "field-key-with-equals",
+	text:     `x x\==1`,
+	expect: []Point{{
+		Measurement: "x",
+		Fields: []FieldKeyValue{{
+			Key:   `x=`,
+			Kind:  Float,
+			Value: "1",
+		}},
+	}},
+	expectStats: 0,
+}, {
+	testName: "field-key-with-double-backslash-separator",
+	text:     `x x\\==1`,
+	expect: []Point{{
+		Measurement: `x`,
+		Fields: []FieldKeyValue{{
+			Key:   `x\=`,
+			Kind:  Float,
+			Value: "1",
+		}},
+	}},
+	expectStats: mkStats(StatBackslashBackslash, StatDoubleBackslashSeparator),
+}, {
+	testName: "field-key-with-more-backslash-separator",
+	text:     `x x\\\\==1`,
+	expect: []Point{{
+		Measurement: `x`,
+		Fields: []FieldKeyValue{{
+			Key:   `x\\\=`,
+			Kind:  Float,
+			Value: "1",
+		}},
+	}},
+	expectStats: mkStats(StatBackslashBackslash, StatDoubleBackslashSeparator),
+}, {
+	testName: "field-str-value-with-backslash-n",
+	text:     `x x="x\n"`,
+	expect: []Point{{
+		Measurement: `x`,
+		Fields: []FieldKeyValue{{
+			Key:   "x",
+			Kind:  String,
+			Value: `x\n`,
+		}},
+	}},
+	expectStats: mkStats(StatStrBackslashN),
+}, {
+	testName: "field-str-value-with-backslash-r",
+	text:     `x x="x\r"`,
+	expect: []Point{{
+		Measurement: `x`,
+		Fields: []FieldKeyValue{{
+			Key:   "x",
+			Kind:  String,
+			Value: `x\r`,
+		}},
+	}},
+	expectStats: mkStats(StatStrBackslashR),
+}, {
+	testName: "field-str-value-with-backslash-t",
+	text:     `x x="x\t"`,
+	expect: []Point{{
+		Measurement: `x`,
+		Fields: []FieldKeyValue{{
+			Key:   "x",
+			Kind:  String,
+			Value: `x\t`,
+		}},
+	}},
+	expectStats: mkStats(StatStrBackslashT),
+}, {
+	testName: "field-str-value-with-backslash-f",
+	text:     `x x="x\f"`,
+	expect: []Point{{
+		Measurement: `x`,
+		Fields: []FieldKeyValue{{
+			Key:   "x",
+			Kind:  String,
+			Value: `x\f`,
+		}},
+	}},
+	expectStats: mkStats(StatStrBackslashF),
+}, {
+	testName: "whitespace-with-tab",
+	text:     "x\ty=1",
+	expect: []Point{{
+		Measurement: `x`,
+		Fields: []FieldKeyValue{{
+			Key:   "y",
+			Kind:  Float,
+			Value: `1`,
+		}},
+	}},
+	expectStats: mkStats(StatWhitespaceTab),
+}, {
+	testName: "whitespace-with-cr",
+	text:     "x\ry=1",
+	expect: []Point{{
+		Measurement: `x`,
+		Fields: []FieldKeyValue{{
+			Key:   "y",
+			Kind:  Float,
+			Value: `1`,
+		}},
+	}},
+	expectStats: mkStats(StatWhitespaceCR),
+}, {
+	testName: "whitespace-with-ff",
+	text:     "x\fy=1",
+	expect: []Point{{
+		Measurement: `x`,
+		Fields: []FieldKeyValue{{
+			Key:   "y",
+			Kind:  Float,
+			Value: `1`,
+		}},
+	}},
+	expectStats: mkStats(StatWhitespaceFF),
+}, {
+	testName: "all-the-stats",
+	text:     "\t\"=\x02X\fF=unknown,y\\n\\r\\t\\f\\\\==\"\n\\n\\r\\t\\f\"\t1602841605822791506\n\r#comment",
+	expect: []Point{{
+		Measurement: "\"=\x02X",
+		Fields: []FieldKeyValue{{
+			Key:   "F",
+			Kind:  Unknown,
+			Value: `unknown`,
+		}, {
+			Key:   "y\\n\\r\\t\\f\\=",
+			Kind:  String,
+			Value: "\n\\n\\r\\t\\f",
+		}},
+		Time: "1602841605822791506",
+	}},
+	expectStats: mkStats(
+		StatStrLiteralNewline,
+		StatBackslashN,
+		StatBackslashR,
+		StatBackslashT,
+		StatBackslashF,
+		StatBackslashBackslash,
+		StatNonPrintable,
+		StatMeasurementEquals,
+		StatDoubleBackslashSeparator,
+		StatQuoteAtStart,
+		StatStrBackslashN,
+		StatStrBackslashR,
+		StatStrBackslashT,
+		StatStrBackslashF,
+		StatWhitespaceTab,
+		StatWhitespaceCR,
+		StatWhitespaceFF,
+		StatUnknownFieldType,
+		StatComment,
+	),
 }}
 
 func TestTokenizer(t *testing.T) {
@@ -295,6 +761,8 @@ func TestTokenizer(t *testing.T) {
 			// Remove section and entry separators, as we're testing all sections.
 			tok := NewTokenizerWithBytes([]byte(removeTestSeparators(test.text)))
 			assertTokenizeResult(c, tok, test.expect, false)
+			got, want := tok.Stats(), test.expectStats
+			c.Assert(got, qt.Equals, want, qt.Commentf("only in got: %v; only in want: %v", got&^want, want&^got))
 		})
 	}
 }
@@ -330,6 +798,9 @@ func TestTokenizerAtSection(t *testing.T) {
 	c := qt.New(t)
 	for _, test := range tokenizerTests {
 		c.Run(test.testName, func(c *qt.C) {
+			if !strings.Contains(test.text, "§") {
+				c.Skip("no separators found")
+			}
 			for secti := range sectionCheckers {
 				sect := Section(secti)
 				c.Run(sect.String(), func(c *qt.C) {
@@ -1210,4 +1681,12 @@ func BenchmarkTokenize(b *testing.B) {
 			b.Fatalf("unexpected read count; got %v want %v", n, total)
 		}
 	}
+}
+
+func mkStats(stats ...Stat) Stats {
+	var s Stats
+	for _, st := range stats {
+		s |= 1 << st
+	}
+	return s
 }
