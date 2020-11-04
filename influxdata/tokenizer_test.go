@@ -446,6 +446,37 @@ func removeTestSeparators(s string) string {
 	return s
 }
 
+func TestTokenizerTokenizeTagsOnly(t *testing.T) {
+	// One specific use case we'd like to support is that of tokenizing just
+	// the tags on their, own.
+	c := qt.New(t)
+	tok := NewTokenizerAtSection([]byte(`a=b,c=hello\,,d=e`), TagSection)
+	var tags []TagKeyValue
+	for {
+		key, val, err := tok.NextTag()
+		c.Assert(err, qt.IsNil)
+		if key == nil {
+			break
+		}
+		tags = append(tags, TagKeyValue{
+			Key:   string(key),
+			Value: string(val),
+		})
+	}
+	c.Assert(tags, qt.DeepEquals, []TagKeyValue{{
+		Key:   "a",
+		Value: "b",
+	}, {
+		Key:   "c",
+		Value: "hello,",
+	}, {
+		Key:   "d",
+		Value: "e",
+	}})
+	_, _, err := tok.NextField()
+	c.Assert(err, qt.ErrorMatches, `expected field key but none found`)
+}
+
 var tokenizerTakeTests = []struct {
 	testName     string
 	newTokenizer func(s string) *Tokenizer
