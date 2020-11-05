@@ -201,10 +201,16 @@ func (t *Tokenizer) NextTag() (key, value []byte, err error) {
 	t.advance(1)
 	tagVal := t.takeEsc(tagValChars, &tagValEscapes.revTable)
 	if len(tagVal) == 0 {
-		return nil, nil, t.syntaxErrorf("expected tag value after tag key, but none found")
+		return nil, nil, t.syntaxErrorf("expected tag value after tag key %q, but none found", tagKey)
 	}
 	if !t.ensure(1) {
-		return nil, nil, t.syntaxErrorf("expected tag value after tag key, but got end of input")
+		// There's no more data after the tag value. Instead of returning an error
+		// immediately, advance to the field section and return the tag and value.
+		// This means that we'll see all the tags even when there's no value,
+		// and it also allows a client to parse the tags in isolation even when there
+		// are no keys. We'll return an error if the client tries to read values from here.
+		t.section = FieldSection
+		return tagKey, tagVal, nil
 	}
 	if err := t.advanceTagComma(); err != nil {
 		return nil, nil, err
@@ -252,10 +258,10 @@ func (t *Tokenizer) NextFieldBytes() (key []byte, kind ValueKind, value []byte, 
 		return nil, Unknown, nil, t.syntaxErrorf("expected field key but none found")
 	}
 	if !t.ensure(1) {
-		return nil, Unknown, nil, t.syntaxErrorf("want '=' after field key, found end of input ")
+		return nil, Unknown, nil, t.syntaxErrorf("want '=' after field key %q, found end of input", fieldKey)
 	}
 	if nextc := t.at(0); nextc != '=' {
-		return nil, Unknown, nil, t.syntaxErrorf("want '=' after field key, found %q", nextc)
+		return nil, Unknown, nil, t.syntaxErrorf("want '=' after field key %q, found %q", fieldKey, nextc)
 	}
 	t.advance(1)
 	if !t.ensure(1) {
