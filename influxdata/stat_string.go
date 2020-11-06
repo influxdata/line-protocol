@@ -8,36 +8,35 @@ func _() {
 	// An "invalid array index" compiler error signifies that the constant values have changed.
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
-	_ = x[StatStrLiteralNewline-1]
-	_ = x[StatBackslashN-2]
-	_ = x[StatBackslashR-3]
-	_ = x[StatBackslashT-4]
-	_ = x[StatBackslashF-5]
-	_ = x[StatBackslashBackslash-6]
-	_ = x[StatNonPrintable-7]
-	_ = x[StatMeasurementEquals-8]
-	_ = x[StatDoubleBackslashSeparator-9]
-	_ = x[StatQuoteAtStart-10]
-	_ = x[StatStrBackslashN-11]
-	_ = x[StatStrBackslashR-12]
-	_ = x[StatStrBackslashT-13]
-	_ = x[StatStrBackslashF-14]
-	_ = x[StatWhitespaceTab-15]
-	_ = x[StatWhitespaceCR-16]
-	_ = x[StatWhitespaceFF-17]
-	_ = x[StatUnknownFieldType-18]
-	_ = x[StatComment-19]
-	_ = x[maxStat-20]
+	_ = x[StatStrLiteralNewline-0]
+	_ = x[StatBackslashN-1]
+	_ = x[StatBackslashR-2]
+	_ = x[StatBackslashT-3]
+	_ = x[StatBackslashF-4]
+	_ = x[StatBackslashBackslash-5]
+	_ = x[StatNonPrintable-6]
+	_ = x[StatMeasurementEquals-7]
+	_ = x[StatDoubleBackslashSeparator-8]
+	_ = x[StatQuoteAtStart-9]
+	_ = x[StatStrBackslashN-10]
+	_ = x[StatStrBackslashR-11]
+	_ = x[StatStrBackslashT-12]
+	_ = x[StatStrBackslashF-13]
+	_ = x[StatWhitespaceTab-14]
+	_ = x[StatWhitespaceCR-15]
+	_ = x[StatWhitespaceFF-16]
+	_ = x[StatUnknownFieldType-17]
+	_ = x[StatComment-18]
+	_ = x[NumStat-19]
 }
 
-const _Stat_name = "StrLiteralNewlineBackslashNBackslashRBackslashTBackslashFBackslashBackslashNonPrintableMeasurementEqualsDoubleBackslashSeparatorQuoteAtStartStrBackslashNStrBackslashRStrBackslashTStrBackslashFWhitespaceTabWhitespaceCRWhitespaceFFUnknownFieldTypeCommentmaxStat"
+const _Stat_name = "StrLiteralNewlineBackslashNBackslashRBackslashTBackslashFBackslashBackslashNonPrintableMeasurementEqualsDoubleBackslashSeparatorQuoteAtStartStrBackslashNStrBackslashRStrBackslashTStrBackslashFWhitespaceTabWhitespaceCRWhitespaceFFUnknownFieldTypeCommentNumStat"
 
 var _Stat_index = [...]uint16{0, 17, 27, 37, 47, 57, 75, 87, 104, 128, 140, 153, 166, 179, 192, 205, 217, 229, 245, 252, 259}
 
 func (i Stat) String() string {
-	i -= 1
 	if i >= Stat(len(_Stat_index)-1) {
-		return "Stat(" + strconv.FormatInt(int64(i+1), 10) + ")"
+		return "Stat(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
 	return _Stat_name[_Stat_index[i]:_Stat_index[i+1]]
 }

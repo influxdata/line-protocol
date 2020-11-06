@@ -14,7 +14,7 @@ func (s Stats) String() string {
 	if s == 0 {
 		return "0"
 	}
-	for i := Stat(0); i < maxStat; i++ {
+	for i := Stat(0); i < NumStat; i++ {
 		if s&(1<<i) == 0 {
 			continue
 		}
@@ -27,17 +27,15 @@ func (s Stats) String() string {
 }
 
 // Ensure that all the Stat constants fit into a Stats value.
-var _ Stats = 1 << maxStat
+var _ Stats = 1 << NumStat
 
 //go:generate stringer -type Stat -trimprefix Stat
 
 type Stat byte
 
 const (
-	_ Stat = iota
-
 	// A field string value contains a literal newline character.
-	StatStrLiteralNewline
+	StatStrLiteralNewline Stat = iota
 
 	// A tag key, tag value, field key or measurement contains a \n, \r, \t or \f sequence.
 	StatBackslashN
@@ -76,7 +74,8 @@ const (
 	// There's a comment (# ...)
 	StatComment
 
-	maxStat
+	// The number of Stat values.
+	NumStat
 )
 
 var unquotedStats = func() *statBytes {
