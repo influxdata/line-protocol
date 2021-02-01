@@ -10,6 +10,15 @@ func newByteSet(s string) *byteSet {
 	return &set
 }
 
+func newByteSetRange(i0, i1 uint8) *byteSet {
+	var set byteSet
+	for i := i0; i <= i1; i++ {
+		set.set(i)
+
+	}
+	return &set
+}
+
 type byteSet [256]bool
 
 // holds reports whether b holds the byte x.
@@ -29,6 +38,19 @@ func (b *byteSet) union(b1 *byteSet) *byteSet {
 		r[i] = r[i] || b1[i]
 	}
 	return &r
+}
+
+// union returns the union of b and b1.
+func (b *byteSet) intersect(b1 *byteSet) *byteSet {
+	r := *b
+	for i := range r {
+		r[i] = r[i] && b1[i]
+	}
+	return &r
+}
+
+func (b *byteSet) without(b1 *byteSet) *byteSet {
+	return b.intersect(b1.invert())
 }
 
 // invert returns everything not in b.

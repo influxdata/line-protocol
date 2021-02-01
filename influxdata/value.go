@@ -2,9 +2,14 @@ package influxdata
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"math"
+	"strconv"
 )
+
+// ErrValueOutOfRange signals that a value is out of the acceptable numeric range.
+var ErrValueOutOfRange = errors.New("line-protocol value out of range")
 
 // Value holds one of the possible line-protocol field values.
 type Value struct {
@@ -40,6 +45,8 @@ func (v1 Value) Equal(v2 Value) bool {
 
 // ParseValue parses the data as a value of the given kind.
 //
+// If the value is out of range, errors.Is(err, ErrValueOutOfRange) will return true.
+//
 // The data for Int and Uint kinds should not include
 // the type suffixes present in the line-protocol field values.
 // For example, the data for the zero Int should be "0" not "0i".
@@ -51,7 +58,7 @@ func ParseValue(kind ValueKind, data []byte) (Value, error) {
 	case Int:
 		x, err := parseIntBytes(data, 10, 64)
 		if err != nil {
-			return Value{}, fmt.Errorf("invalid integer value %q", data)
+			return Value{}, maybeOutOfRange(err, "invalid integer value syntax")
 		}
 		return Value{
 			number: uint64(x),
@@ -60,7 +67,7 @@ func ParseValue(kind ValueKind, data []byte) (Value, error) {
 	case Uint:
 		x, err := parseUintBytes(data, 10, 64)
 		if err != nil {
-			return Value{}, fmt.Errorf("invalid unsigned integer value %q", data)
+			return Value{}, maybeOutOfRange(err, "invalid unsigned integer value syntax")
 		}
 		return Value{
 			number: x,
@@ -69,7 +76,7 @@ func ParseValue(kind ValueKind, data []byte) (Value, error) {
 	case Float:
 		x, err := parseFloatBytes(data, 64)
 		if err != nil {
-			return Value{}, fmt.Errorf("invalid float value %q", data)
+			return Value{}, maybeOutOfRange(err, "invalid float value syntax")
 		}
 		if math.IsInf(x, 0) || math.IsNaN(x) {
 			return Value{}, fmt.Errorf("non-number %q cannot be represented as a line-protocol field value", data)
@@ -251,4 +258,11 @@ func (v Value) String() string {
 	default:
 		panic("unknown kind")
 	}
+}
+
+func maybeOutOfRange(err error, s string) error {
+	if err, ok := err.(*strconv.NumError); ok && err.Err == strconv.ErrRange {
+		return ErrValueOutOfRange
+	}
+	return errors.New(s)
 }

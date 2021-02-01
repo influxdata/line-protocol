@@ -21,6 +21,26 @@ import (
 // all the current implementations are wrong.
 var corpusAllowList = map[string]string{
 	"4e8bcb126274d3290789538902dab6ee": "no trailing backslash",
+	"13a9b07a16a3adfe3480654a86d02e38": "non-printable character in measurement or key",
+	"25957c0a9f5e3a8c28124d338e73bad3": "non-printable character in measurement or key",
+	"2cad3ab7d1f6c69175256bd38427e41b": "non-printable character in measurement or key",
+	"2df1f638db625653021bdd81d082aa7b": "non-printable character in measurement or key",
+	"34e61d66cbcbb9396d649d96abb9cfc8": "non-printable character in measurement or key",
+	"43020303d156ae3e021b05606aac1e4e": "non-printable character in measurement or key",
+	"51909957b5a97015a9fde47953331e91": "non-printable character in measurement or key",
+	"7e0ed32d7d67962c4aca9cdb4a33810b": "non-printable character in measurement or key",
+	"9017c9c3ef7ab576ecca88c4e7c4f93d": "non-printable character in measurement or key",
+	"97d1c1087409d74398d4c1a2ba0db15c": "non-printable character in measurement or key",
+	"9f2ffee457c600e2bb7dc02863e206ab": "non-printable character in measurement or key",
+	"a2104143356bbe4f000c8d513d8f73e8": "non-printable character in measurement or key",
+	"a5ad697c142e6043f0891a33b762ec73": "non-printable character in measurement or key",
+	"a667a7c1a0587907bf12d6c3cc130fa8": "non-printable character in measurement or key",
+	"b08459b50de67f9c766806fac2039f5e": "non-printable character in measurement or key",
+	"b5c0ed5b3beaaff0210c645b3e8f42b1": "non-printable character in measurement or key",
+	"ca0fab37d66bfe0a70b01297141f179c": "non-printable character in measurement or key",
+	"f8ccd78f52d6485b24303a99b4c314b2": "non-printable character in measurement or key",
+	"f9d6e94df94cb7ae71cc5468ede46fcd": "non-printable character in measurement or key",
+	"fd0df398c06cca4efbb3fcb7061acbb7": "non-printable character in measurement or key",
 }
 
 func TestCorpus(t *testing.T) {
@@ -95,7 +115,7 @@ func tokenizeToCorpusMetrics(text []byte, precision string, defaultTime int64) (
 	for tok.Next() {
 		m, err := tokenizeToCorpusMetric(tok, precision, defaultTime)
 		if err != nil {
-			return nil, fmt.Errorf("cannot get metric %v: %v", len(ms), err)
+			return nil, fmt.Errorf("cannot get metric for point %d: %v", len(ms), err)
 		}
 		ms = append(ms, m)
 	}

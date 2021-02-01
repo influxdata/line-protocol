@@ -15,20 +15,24 @@ const (
 )
 
 var (
-	measurementChars      = newByteSet(",").union(whitespace).invert()
-	measurementEscapes    = newEscaper(" ,")
-	tagKeyChars           = newByteSet(",=").union(whitespace).invert()
+	fieldSeparatorSpace   = newByteSet(" ")
+	whitespace            = fieldSeparatorSpace.union(newByteSet("\r\n"))
+	tagKeyChars           = newByteSet(",= ").union(nonPrintable).invert()
 	tagKeyEscapes         = newEscaper(",= ")
+	nonPrintable          = newByteSetRange(0, 31).union(newByteSet("\x7f"))
+	eolChars              = newByteSet("\r\n")
+	measurementChars      = newByteSet(", ").union(nonPrintable).invert()
+	measurementEscapes    = newEscaper(" ,")
 	tagValChars           = newByteSet(",=").union(whitespace).invert()
 	tagValEscapes         = newEscaper(", =")
-	fieldSeparatorSpace   = newByteSet(" \t\r\f")
 	fieldKeyChars         = tagKeyChars
 	fieldKeyEscapes       = tagKeyEscapes
 	fieldStringValChars   = newByteSet(`"`).invert()
 	fieldStringValEscapes = newEscaper(`\"`)
 	fieldValChars         = newByteSet(",").union(whitespace).invert()
 	timeChars             = newByteSet("-0123456789")
-	whitespace            = fieldSeparatorSpace.union(newByteSet("\n"))
+	commentChars          = nonPrintable.invert().without(eolChars)
+	notEOL                = eolChars.invert()
 	notNewline            = newByteSet("\n").invert()
 )
 
@@ -167,7 +171,16 @@ func (t *Tokenizer) Measurement() ([]byte, error) {
 	t.reset()
 	measure := t.takeEsc(measurementChars, &measurementEscapes.revTable)
 	if len(measure) == 0 {
-		return nil, t.syntaxErrorf("no measurement name found")
+		if !t.ensure(1) {
+			return nil, t.syntaxErrorf("no measurement name found")
+		}
+		return nil, t.syntaxErrorf("invalid character %q found at start of measurement name", t.at(0))
+	}
+	if measure[0] == '#' {
+		// Comments are usually skipped earlier but if a comment contains invalid white space,
+		// there's no way for the comment-parsing code to return an error, so instead
+		// the read point is set to the start of the comment and we hit this case.
+		return nil, t.syntaxErrorf("invalid character found in comment line")
 	}
 	if err := t.advanceTagComma(); err != nil {
 		return nil, err
@@ -192,10 +205,10 @@ func (t *Tokenizer) NextTag() (key, value []byte, err error) {
 		return nil, nil, nil
 	}
 	tagKey := t.takeEsc(tagKeyChars, &tagKeyEscapes.revTable)
-	if len(tagKey) == 0 {
-		return nil, nil, t.syntaxErrorf("empty tag name")
-	}
-	if !t.ensure(1) || t.at(0) != '=' {
+	if len(tagKey) == 0 || !t.ensure(1) || t.at(0) != '=' {
+		if !t.ensure(1) {
+			return nil, nil, t.syntaxErrorf("empty tag name")
+		}
 		return nil, nil, t.syntaxErrorf("expected '=' after tag key %q, but got %q instead", tagKey, t.at(0))
 	}
 	t.advance(1)
@@ -255,7 +268,10 @@ func (t *Tokenizer) NextFieldBytes() (key []byte, kind ValueKind, value []byte, 
 	}
 	fieldKey := t.takeEsc(fieldKeyChars, &fieldKeyEscapes.revTable)
 	if len(fieldKey) == 0 {
-		return nil, Unknown, nil, t.syntaxErrorf("expected field key but none found")
+		if !t.ensure(1) {
+			return nil, Unknown, nil, t.syntaxErrorf("expected field key but none found")
+		}
+		return nil, Unknown, nil, t.syntaxErrorf("invalid character %q found at start of field key", t.at(0))
 	}
 	if !t.ensure(1) {
 		return nil, Unknown, nil, t.syntaxErrorf("want '=' after field key %q, found end of input", fieldKey)
@@ -300,8 +316,7 @@ func (t *Tokenizer) NextFieldBytes() (key []byte, kind ValueKind, value []byte, 
 			fieldKind = Float
 		}
 	default:
-		fieldVal = t.take(fieldValChars)
-		fieldKind = Unknown
+		return nil, Unknown, nil, t.syntaxErrorf("field value has unrecognized type")
 	}
 	if !t.ensure(1) {
 		t.section = endSection
@@ -316,7 +331,7 @@ func (t *Tokenizer) NextFieldBytes() (key []byte, kind ValueKind, value []byte, 
 		return nil, Unknown, nil, t.syntaxErrorf("unexpected character %q after field", nextc)
 	}
 	t.take(fieldSeparatorSpace)
-	if !t.ensure(1) || t.at(0) == '\n' {
+	if t.takeEOL() {
 		t.section = endSection
 		return fieldKey, fieldKind, fieldVal, nil
 	}
@@ -324,10 +339,41 @@ func (t *Tokenizer) NextFieldBytes() (key []byte, kind ValueKind, value []byte, 
 	return fieldKey, fieldKind, fieldVal, nil
 }
 
+// takeEOL consumes a line terminator. It reports whether
+// a line terminator or the end of input was found.
+func (t *Tokenizer) takeEOL() bool {
+	if !t.ensure(1) {
+		// End of input.
+		return true
+	}
+	switch t.at(0) {
+	case '\n':
+		// Regular NL.
+		t.advance(1)
+		return true
+	case '\r':
+		if !t.ensure(2) {
+			// CR at end of input.
+			t.advance(1)
+			return true
+		}
+		if t.at(1) == '\n' {
+			// CR-NL
+			t.advance(2)
+			return true
+		}
+	}
+	return false
+}
+
 // NextField is a wrapper around NextFieldBytes that parses
 // the field value. Note: the returned value is only valid
 // until the next call method call on Tokenizer because when
 // it's a string, it refers to an internal buffer.
+//
+// If the value cannot be parsed because it's out of range
+// (as opposed to being syntactically invalid),
+// the errors.Is(err, ErrValueOutOfRange) will return true.
 func (t *Tokenizer) NextField() (key []byte, val Value, err error) {
 	key, kind, data, err := t.NextFieldBytes()
 	if err != nil || key == nil {
@@ -335,7 +381,7 @@ func (t *Tokenizer) NextField() (key []byte, val Value, err error) {
 	}
 	v, err := ParseValue(kind, data)
 	if err != nil {
-		return nil, Value{}, fmt.Errorf("cannot parse value for field key %q: %v", key, err)
+		return nil, Value{}, fmt.Errorf("cannot parse value for field key %q: %w", key, err)
 	}
 	return key, v, nil
 }
@@ -360,7 +406,7 @@ func (t *Tokenizer) TimeBytes() ([]byte, error) {
 	}
 	if !whitespace.get(t.at(0)) {
 		// Absorb the rest of the line so that we get a better error.
-		t.take(notNewline)
+		t.take(notEOL)
 		return nil, t.syntaxErrorf("invalid timestamp (%q)", t.buf[t.r0+start:t.r1])
 	}
 	t.take(fieldSeparatorSpace)
@@ -368,11 +414,10 @@ func (t *Tokenizer) TimeBytes() ([]byte, error) {
 		t.section = endSection
 		return timeBytes, nil
 	}
-	if t.at(0) != '\n' {
-		extra := t.take(notNewline)
+	if !t.takeEOL() {
+		extra := t.take(notEOL)
 		return nil, t.syntaxErrorf("unexpected text after timestamp (%q)", extra)
 	}
-	t.advance(1)
 	t.section = endSection
 	return timeBytes, nil
 }
@@ -389,38 +434,49 @@ func (t *Tokenizer) Time(prec Precision, defaultTime time.Time) (time.Time, erro
 	}
 	ts, err := parseIntBytes(data, 10, 64)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("invalid timestamp %q", data)
+		return time.Time{}, fmt.Errorf("invalid timestamp: %w", maybeOutOfRange(err, "invalid syntax"))
 	}
 	ns, ok := prec.asNanoseconds(ts)
 	if !ok {
-		return time.Time{}, fmt.Errorf("timestamp %s%s out of range", data, prec)
+		return time.Time{}, fmt.Errorf("invalid timestamp: %w", ErrValueOutOfRange)
 	}
 	return time.Unix(0, ns), nil
 }
 
+// consumeLine is used to recover from errors by reading an entire
+// line even if it contains invalid characters.
 func (t *Tokenizer) consumeLine() {
 	t.take(notNewline)
-	t.reset()
-	if t.ensure(1) {
-		// Consume the newline byte.
+	if t.at(0) == '\n' {
 		t.advance(1)
 	}
+	t.reset()
 	t.section = endSection
 }
 
 func (t *Tokenizer) skipEmptyLines() {
 	for {
+		startLine := t.r1 - t.r0
 		t.take(fieldSeparatorSpace)
 		switch t.at(0) {
 		case '#':
 			// Found a comment.
-			t.take(notNewline)
-			if t.at(0) != '\n' {
+			t.take(commentChars)
+			if !t.takeEOL() {
+				// Comment has invalid characters.
+				// Rewind input to start of comment so
+				// that next section will return the error.
+				t.r1 = t.r0 + startLine
 				return
 			}
-			t.advance(1)
 		case '\n':
 			t.advance(1)
+		case '\r':
+			if !t.takeEOL() {
+				// Solitary carriage return.
+				// Leave it there and next section will return an error.
+				return
+			}
 		default:
 			return
 		}
