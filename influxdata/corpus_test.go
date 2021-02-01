@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"sort"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 	"unicode/utf8"
@@ -43,13 +45,14 @@ var corpusAllowList = map[string]string{
 	"fd0df398c06cca4efbb3fcb7061acbb7": "non-printable character in measurement or key",
 }
 
-func TestCorpus(t *testing.T) {
+func TestCorpusDecode(t *testing.T) {
 	c := qt.New(t)
-	corpus, err := readCorpus()
+	corpus, err := readCorpusDecodeResults()
 	c.Assert(err, qt.IsNil)
 	for _, test := range corpus {
 		c.Run(test.Input.Key, func(c *qt.C) {
-			m, err := tokenizeToCorpusMetrics(test.Input.Text, test.Input.Precision, test.Input.DefaultTime)
+			precision := fromCorpusPrecision(test.Input.Precision)
+			m, err := tokenizeToCorpusMetrics(test.Input.Text, precision, test.Input.DefaultTime)
 			// We'll treat it as success if we match any of the result
 			ok := false
 			validResults := 0
@@ -97,6 +100,101 @@ func TestCorpus(t *testing.T) {
 	}
 }
 
+func TestCorpusEncode(t *testing.T) {
+	c := qt.New(t)
+	corpus, err := readCorpusEncodeResults()
+	c.Assert(err, qt.IsNil)
+	for _, test := range corpus {
+		c.Run(test.Input.Key, func(c *qt.C) {
+			if !test.Input.UintSupport {
+				c.Skip("uint support cannot be disabled")
+			}
+			if test.Input.OmitInvalidFields {
+				c.Skip("cannot omit invalid fields")
+			}
+			precision := fromCorpusPrecision(test.Input.Precision)
+			data, err := encodeWithCorpusInput(test.Input.Metric, precision)
+			if err == nil {
+				// The encoding succeeded. Check that we can round-trip back to the
+				// original values.
+				ms, err := tokenizeToCorpusMetrics(data, precision, 0)
+				if c.Check(err, qt.IsNil) {
+					c.Check(ms, qt.HasLen, 1)
+					c.Check(ms[0], qt.DeepEquals, test.Input.Metric)
+				}
+			}
+			if metricContainsDifferentlyRepresentedNumber(test.Input.Metric) {
+				// TODO there are multiple valid encodings. what should the corpus do in this case?
+				c.Skip("large numbers encode using exponential notation, which is a change from other implementations")
+			}
+			ok := false
+			validResults := 0
+			for _, out := range test.Output {
+				validResults++
+				if out.Error != "" {
+					ok = ok || err != nil
+					continue
+				}
+				ok = ok || bytes.Equal(data, out.Result)
+			}
+			if ok {
+				return
+			}
+			if validResults == 0 {
+				c.Errorf("no implementation produced a valid result")
+				return
+			}
+			if err != nil {
+				c.Errorf("all implementations succeeded but Encode failed with error: %v", err)
+				return
+			}
+			c.Errorf("result doesn't match any implementation")
+			c.Logf("%s", data)
+		})
+	}
+}
+
+// metricContainsDifferentlyRepresentedNumber reports whether the metric
+// contains a field that holds a float value that's encoded differently
+// by the old line-protocol implementations which never use exponential
+// notation for encoded numbers.
+func metricContainsDifferentlyRepresentedNumber(m *corpusMetric) bool {
+	for _, field := range m.Fields {
+		v, err := fromCorpusValue(field.Value)
+		if err != nil {
+			// This error will be picked up later.
+			continue
+		}
+		if v.Kind() != Float {
+			continue
+		}
+		f1 := strconv.FormatFloat(v.FloatV(), 'f', -1, 64)
+		f2 := strconv.FormatFloat(v.FloatV(), 'g', -1, 64)
+		if f1 != f2 {
+			return true
+		}
+	}
+	return false
+}
+
+func encodeWithCorpusInput(m *corpusMetric, precision Precision) ([]byte, error) {
+	var e Encoder
+	e.SetPrecision(precision)
+	e.StartLineRaw(m.Name)
+	for _, tag := range m.Tags {
+		e.AddTagRaw(tag.Key, tag.Value)
+	}
+	for _, field := range m.Fields {
+		v, err := fromCorpusValue(field.Value)
+		if err != nil {
+			return nil, fmt.Errorf("invalid value for encoding: %v", err)
+		}
+		e.AddFieldRaw(field.Key, v)
+	}
+	e.EndLine(time.Unix(0, m.Time))
+	return e.Bytes(), e.Err()
+}
+
 func hasBackslashVIssue(s []byte) bool {
 	if len(s) > 2 && s[1] == '\v' {
 		return true
@@ -109,7 +207,7 @@ func hasBackslashVIssue(s []byte) bool {
 	return false
 }
 
-func tokenizeToCorpusMetrics(text []byte, precision string, defaultTime int64) ([]*corpusMetric, error) {
+func tokenizeToCorpusMetrics(text []byte, precision Precision, defaultTime int64) ([]*corpusMetric, error) {
 	tok := NewTokenizerWithBytes(text)
 	ms := []*corpusMetric{}
 	for tok.Next() {
@@ -122,8 +220,11 @@ func tokenizeToCorpusMetrics(text []byte, precision string, defaultTime int64) (
 	return ms, nil
 }
 
-func tokenizeToCorpusMetric(tok *Tokenizer, precision string, defaultTime int64) (*corpusMetric, error) {
-	var m corpusMetric
+func tokenizeToCorpusMetric(tok *Tokenizer, precision Precision, defaultTime int64) (*corpusMetric, error) {
+	m := corpusMetric{
+		Tags:   []corpusTag{},
+		Fields: []corpusField{},
+	}
 	var err error
 	m.Name, err = tok.Measurement()
 	if err != nil {
@@ -182,20 +283,8 @@ func tokenizeToCorpusMetric(tok *Tokenizer, precision string, defaultTime int64)
 		}
 		m.Fields = append(m.Fields, field)
 	}
-	var p Precision
-	switch precision {
-	case "1ns":
-		p = Nanosecond
-	case "1µs":
-		p = Microsecond
-	case "1ms":
-		p = Millisecond
-	case "1s":
-		p = Second
-	default:
-		panic(fmt.Errorf("unknown precision in test corpus %q", precision))
-	}
-	timestamp, err := tok.Time(p, time.Unix(0, defaultTime))
+
+	timestamp, err := tok.Time(precision, time.Unix(0, defaultTime))
 	if err != nil {
 		return nil, fmt.Errorf("cannot get time: %v", err)
 	}
@@ -203,12 +292,24 @@ func tokenizeToCorpusMetric(tok *Tokenizer, precision string, defaultTime int64)
 	return &m, nil
 }
 
+func fromCorpusPrecision(precision string) Precision {
+	switch precision {
+	case "1ns":
+		return Nanosecond
+	case "1µs":
+		return Microsecond
+	case "1ms":
+		return Millisecond
+	case "1s":
+		return Second
+	default:
+		panic(fmt.Errorf("unknown precision in test corpus %q", precision))
+	}
+}
+
 func dupBytes(b []byte) []byte {
 	return append([]byte(nil), b...)
 }
-
-// unused but we'd like to keep around, so pacify staticcheck.
-var _ = fromCorpusValue
 
 func fromCorpusValue(v corpusValue) (Value, error) {
 	switch {
@@ -231,34 +332,83 @@ func fromCorpusValue(v corpusValue) (Value, error) {
 	}
 }
 
-func readCorpus() ([]*corpusDecodeResults, error) {
-	const corpusFile = "testdata/corpus-results.json"
-	data, err := ioutil.ReadFile(corpusFile)
-	if err != nil {
-		return nil, err
-	}
-	var r corpusResults
-	if err := json.Unmarshal(data, &r); err != nil {
-		if terr, ok := err.(*json.UnmarshalTypeError); ok {
-			return nil, fmt.Errorf("unmarshal error at %s:#%d: %v", corpusFile, terr.Offset, err)
+var corpus struct {
+	once          sync.Once
+	decodeResults []*corpusDecodeResults
+	encodeResults []*corpusEncodeResults
+	err           error
+}
+
+func readCorpusOnce() {
+	corpus.once.Do(func() {
+		const corpusFile = "testdata/corpus-results.json"
+		data, err := ioutil.ReadFile(corpusFile)
+		if err != nil {
+			corpus.err = err
+			return
 		}
-		return nil, fmt.Errorf("unmarshal error at %s: %v", corpusFile, err)
-	}
-	// Return a slice rather than the map so that
-	// it's easy to execute the tests in deterministic order.
-	rs := make([]*corpusDecodeResults, 0, len(r.Decode))
-	for _, d := range r.Decode {
-		rs = append(rs, d)
-	}
-	sort.Slice(rs, func(i, j int) bool {
-		return rs[i].Input.Key < rs[j].Input.Key
+		var r corpusResults
+		if err := json.Unmarshal(data, &r); err != nil {
+			if terr, ok := err.(*json.UnmarshalTypeError); ok {
+				corpus.err = fmt.Errorf("unmarshal error at %s:#%d: %v", corpusFile, terr.Offset, err)
+				return
+			}
+			corpus.err = fmt.Errorf("unmarshal error at %s: %v", corpusFile, err)
+			return
+		}
+		// Create slices rather than using the maps directly so that
+		// it's easy to execute the tests in deterministic order.
+		drs := make([]*corpusDecodeResults, 0, len(r.Decode))
+		for _, d := range r.Decode {
+			drs = append(drs, d)
+		}
+		sort.Slice(drs, func(i, j int) bool {
+			return drs[i].Input.Key < drs[j].Input.Key
+		})
+		corpus.decodeResults = drs
+
+		ers := make([]*corpusEncodeResults, 0, len(r.Encode))
+		for _, e := range r.Encode {
+			ers = append(ers, e)
+		}
+		sort.Slice(ers, func(i, j int) bool {
+			return ers[i].Input.Key < ers[j].Input.Key
+		})
+		corpus.encodeResults = ers
 	})
-	return rs, nil
+}
+
+func readCorpusDecodeResults() ([]*corpusDecodeResults, error) {
+	readCorpusOnce()
+	return corpus.decodeResults, corpus.err
+}
+
+func readCorpusEncodeResults() ([]*corpusEncodeResults, error) {
+	readCorpusOnce()
+	return corpus.encodeResults, corpus.err
 }
 
 type corpusResults struct {
 	Decode map[string]*corpusDecodeResults `json:"decode,omitempty"`
-	// TODO include encode results too when we've got an encoder.
+	Encode map[string]*corpusEncodeResults `json:"encode,omitempty"`
+}
+
+type corpusEncodeResults struct {
+	Input  *corpusEncodeInput             `json:"input"`
+	Output map[string]*corpusEncodeOutput `json:"output"`
+}
+
+type corpusEncodeInput struct {
+	Key               string        `json:"key"`
+	Metric            *corpusMetric `json:"metric"`
+	OmitInvalidFields bool          `json:"omitInvalidFields"`
+	UintSupport       bool          `json:"uintSupport"`
+	Precision         string        `json:"precision"`
+}
+
+type corpusEncodeOutput struct {
+	Result corpusBytes `json:"result,omitempty"`
+	Error  string      `json:"error,omitempty"`
 }
 
 type corpusDecodeResults struct {

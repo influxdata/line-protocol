@@ -111,7 +111,7 @@ func TestValueCreation(t *testing.T) {
 	c := qt.New(t)
 	for _, test := range parseValueTests {
 		c.Run(test.testName, func(c *qt.C) {
-			v, err := ParseValue(test.kind, []byte(test.data))
+			v, err := NewValueFromBytes(test.kind, []byte(test.data))
 			if test.expectError != "" {
 				c.Assert(err, qt.ErrorMatches, test.expectError)
 			} else {

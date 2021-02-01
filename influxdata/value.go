@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"unicode/utf8"
 )
 
 // ErrValueOutOfRange signals that a value is out of the acceptable numeric range.
@@ -39,11 +40,13 @@ func MustNewValue(x interface{}) Value {
 	return v
 }
 
+// Equal reports whether v1 is equal to v2.
 func (v1 Value) Equal(v2 Value) bool {
 	return v1.Kind() == v2.Kind() && v1.number == v2.number && bytes.Equal(v1.bytes, v2.bytes)
 }
 
-// ParseValue parses the data as a value of the given kind.
+// NewValueFromBytes creates a value of the given kind with the
+// given data, as returned from Tokenizer.NextFieldBytes.
 //
 // If the value is out of range, errors.Is(err, ErrValueOutOfRange) will return true.
 //
@@ -51,9 +54,10 @@ func (v1 Value) Equal(v2 Value) bool {
 // the type suffixes present in the line-protocol field values.
 // For example, the data for the zero Int should be "0" not "0i".
 //
-// If kind is String, the returned value still refers to the data
-// slice: it does not make a copy.
-func ParseValue(kind ValueKind, data []byte) (Value, error) {
+// The data for String should not include the surrounding quotes,
+// should be unescaped already and should not contain invalid
+// utf-8. The returned value will contain a reference to data - it does not make a copy.
+func NewValueFromBytes(kind ValueKind, data []byte) (Value, error) {
 	switch kind {
 	case Int:
 		x, err := parseIntBytes(data, 10, 64)
@@ -95,7 +99,9 @@ func ParseValue(kind ValueKind, data []byte) (Value, error) {
 			bytes:  boolSentinel[:],
 		}, nil
 	case String:
-		// TODO check that it's valid utf-8 data?
+		if !utf8.Valid(data) {
+			return Value{}, fmt.Errorf("invalid utf-8 found in value %q", data)
+		}
 		return Value{
 			bytes: data,
 		}, nil
@@ -110,9 +116,13 @@ func ParseValue(kind ValueKind, data []byte) (Value, error) {
 // be of type int64 (Int), uint64 (Uint), float64 (Float), bool (Bool),
 // string (String) or []byte (String).
 //
-// Unlike ParseValue, NewValue will make a copy of the byte
-// slice if x is []byte - use ParseValue if you require zero-copy
+// Unlike NewValueFromBytes, NewValue will make a copy of the byte
+// slice if x is []byte - use NewValueFromBytes if you require zero-copy
 // semantics.
+//
+// NewValue will fail and return false if x isn't a recognized
+// type or if it's a non-finite float64, or if a string or byte slice contains
+// invalid utf-8.
 func NewValue(x interface{}) (Value, bool) {
 	switch x := x.(type) {
 	case int64:
@@ -237,24 +247,34 @@ func (v Value) Kind() ValueKind {
 	return String
 }
 
-// String returns the value similarly to how it would appear
-// in a line-protocol entry, except that strings are quoted
-// according to Go rules not line-protocol rules.
+// String returns the value as it would be encoded in a line-protocol entry.
 func (v Value) String() string {
+	return string(v.AppendBytes(nil))
+}
+
+// AppendTo appends the encoded value of v to buf.
+func (v Value) AppendBytes(dst []byte) []byte {
 	switch v.Kind() {
 	case Float:
-		return fmt.Sprint(v.FloatV())
+		return strconv.AppendFloat(dst, v.FloatV(), 'g', -1, 64)
 	case Int:
-		return fmt.Sprintf("%di", v.IntV())
+		dst = strconv.AppendInt(dst, v.IntV(), 10)
+		dst = append(dst, 'i')
+		return dst
 	case Uint:
-		return fmt.Sprintf("%du", v.UintV())
+		dst = strconv.AppendUint(dst, v.UintV(), 10)
+		dst = append(dst, 'u')
+		return dst
 	case Bool:
 		if v.BoolV() {
-			return "true"
+			return append(dst, "true"...)
 		}
-		return "false"
+		return append(dst, "false"...)
 	case String:
-		return fmt.Sprintf("%q", v.StringV())
+		dst = append(dst, '"')
+		dst = fieldStringValEscapes.appendEscaped(dst, unsafeBytesToString(v.bytes))
+		dst = append(dst, '"')
+		return dst
 	default:
 		panic("unknown kind")
 	}
