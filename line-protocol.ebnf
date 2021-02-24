@@ -1,0 +1,49 @@
+// This file holds a grammar for the line-protocol syntax.
+// The grammar is in EBNF format as used in the Go specification.
+
+lines = line { [ "\r" ] "\n" line } [ "\r" ] .
+
+space_char = " " .
+whitespace = space_char { space_char } .
+nonprintable_char = "\u0000"…"\u001f" | "\u007f" .
+
+line = { space_char } [ point | comment ] .
+point = measurement { "," tag } whitespace field { "," field } [ whitespace timestamp ] { space_char } .
+comment = "#" { not(nonprintable_char) | "\t" } .
+
+measurement = measurement_start { measurement_elem } .
+// Note: the start character is different from other measurement characters
+// because it can't be a # character (otherwise it would match a comment).
+measurement_start = not(nonprintable_char | space_char | `\` | "," | "#" )  | measurement_escape_seq .
+measurement_elem = measurement_regular_char | measurement_escape_seq .
+measurement_regular_char = not(nonprintable_char | space_char | `\` | "," ) .
+measurement_escape_seq = `\` {  `\` } not ( `\` | nonprintable_char ).
+
+key = key_elem { key_elem } .
+key_elem = key_regular_char | key_escape_seq .
+key_regular_char = not(nonprintable_char | space_char | `\` | "," | "=" ) .
+key_escape_seq = `\` {  `\` } not ( `\`  | nonprintable_char ) .
+
+tag = key "=" key .
+
+field = key "=" fieldval .
+
+fieldval = boolfield | stringfield | intfield | uintfield | floatfield .
+decimal_digits = decimal_digit { decimal_digit } .
+decimal_digit = "0" … "9" .
+
+boolfield = "t" | "T" | "true" | "True" | "TRUE" | "f" | "F" | "false" | "False" | "FALSE" .
+intfield = [ "-" ] decimal_digits "i" .
+uintfield = decimal_digits "u" .
+
+floatfield = [ "-" ] non_negative_float .
+non_negative_float = decimal_digits [ "." [ decimal_digits ] [ decimal_exponent ] ] |
+                    decimal_digits decimal_exponent |
+                    "." decimal_digits [ decimal_exponent ] .
+
+decimal_exponent  = ( "e" | "E" ) [ "+" | "-" ] decimal_digits .
+
+stringfield = `"` { not(`"` | `\`) | `\` any_char } `"` .
+any_char = "\u0000" … "\U0010FFFF" .
+
+timestamp = [ "-" ] decimal_digits .

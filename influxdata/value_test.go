@@ -54,17 +54,17 @@ var parseValueTests = []struct {
 	testName:    "invalid-int",
 	kind:        Int,
 	data:        "1e3",
-	expectError: `invalid integer value "1e3"`,
+	expectError: `invalid integer value syntax`,
 }, {
 	testName:    "invalid-uint",
 	kind:        Uint,
 	data:        "1e3",
-	expectError: `invalid unsigned integer value "1e3"`,
+	expectError: `invalid unsigned integer value syntax`,
 }, {
 	testName:    "invalid-float",
 	kind:        Float,
 	data:        "1e3a",
-	expectError: `invalid float value "1e3a"`,
+	expectError: `invalid float value syntax`,
 }, {
 	testName:    "NaN",
 	kind:        Float,
@@ -90,6 +90,21 @@ var parseValueTests = []struct {
 	kind:        125,
 	data:        "nope",
 	expectError: `unexpected value kind 125 \(value "nope"\)`,
+}, {
+	testName:    "out-of-range-int",
+	kind:        Int,
+	data:        "18446744073709552000",
+	expectError: `line-protocol value out of range`,
+}, {
+	testName:    "out-of-range-uint",
+	kind:        Uint,
+	data:        "18446744073709552000",
+	expectError: `line-protocol value out of range`,
+}, {
+	testName:    "out-of-range-float",
+	kind:        Float,
+	data:        "1e18446744073709552000",
+	expectError: `line-protocol value out of range`,
 }}
 
 func TestValueCreation(t *testing.T) {

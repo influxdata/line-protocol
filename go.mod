@@ -1,4 +1,4 @@
-module github.com/influxdata/line-protocol
+module github.com/influxdata/line-protocol/v2
 
 go 1.15
 

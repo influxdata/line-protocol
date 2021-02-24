@@ -2,6 +2,7 @@ package influxdata
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"regexp"
@@ -18,9 +19,9 @@ type TagKeyValue struct {
 }
 
 type FieldKeyValue struct {
-	Key, Value string
-	Kind       ValueKind
-	Error      string
+	Key   string
+	Value interface{}
+	Error string
 }
 
 type Point struct {
@@ -70,10 +71,14 @@ var sectionCheckers = []func(c *qt.C, tok *Tokenizer, expect Point){
 	FieldSection: func(c *qt.C, tok *Tokenizer, expect Point) {
 		var fields []FieldKeyValue
 		for {
-			key, kind, value, err := tok.NextFieldBytes()
+			key, value, err := tok.NextField()
 			if err != nil {
+				if s := err.Error(); strings.Contains(s, "out of range") {
+					if !errors.Is(err, ErrValueOutOfRange) {
+						c.Errorf("out of range error not propagated to result error")
+					}
+				}
 				c.Assert(key, qt.IsNil)
-				c.Assert(value, qt.IsNil)
 				fields = append(fields, FieldKeyValue{
 					Error: err.Error(),
 				})
@@ -84,8 +89,7 @@ var sectionCheckers = []func(c *qt.C, tok *Tokenizer, expect Point){
 			}
 			fields = append(fields, FieldKeyValue{
 				Key:   string(key),
-				Value: string(value),
-				Kind:  kind,
+				Value: value.Interface(),
 			})
 		}
 		c.Assert(fields, qt.DeepEquals, expect.Fields)
@@ -130,24 +134,19 @@ var tokenizerTests = []struct {
 		}},
 		Fields: []FieldKeyValue{{
 			Key:   "floatfield",
-			Kind:  Float,
-			Value: "1",
+			Value: 1.0,
 		}, {
 			Key:   "strfield",
-			Kind:  String,
 			Value: "hello",
 		}, {
 			Key:   "intfield",
-			Kind:  Int,
-			Value: "-1",
+			Value: int64(-1),
 		}, {
 			Key:   "uintfield",
-			Kind:  Uint,
-			Value: "1",
+			Value: uint64(1),
 		}, {
 			Key:   "boolfield",
-			Kind:  Bool,
-			Value: "true",
+			Value: true,
 		}},
 		Time: "1602841605822791506",
 	}},
@@ -168,7 +167,6 @@ var tokenizerTests = []struct {
 		}},
 		Fields: []FieldKeyValue{{
 			Key:   "x",
-			Kind:  String,
 			Value: "first",
 		}},
 		Time: "1602841605822791506",
@@ -180,7 +178,6 @@ var tokenizerTests = []struct {
 		}},
 		Fields: []FieldKeyValue{{
 			Key:   "x",
-			Kind:  String,
 			Value: "second",
 		}},
 		Time: "1602841605822792000",
@@ -204,7 +201,6 @@ var tokenizerTests = []struct {
 		}},
 		Fields: []FieldKeyValue{{
 			Key:   "field=x",
-			Kind:  String,
 			Value: "fir\"\n,st\\",
 		}},
 		Time: "1602841605822791506",
@@ -215,13 +211,7 @@ var tokenizerTests = []struct {
 	expect: []Point{{
 		Measurement: "TestBucket",
 		Fields: []FieldKeyValue{{
-			Key:   "FieldOne",
-			Kind:  Unknown,
-			Value: "Happy",
-		}, {
-			Key:   "FieldTwo",
-			Kind:  Unknown,
-			Value: "sad",
+			Error: "field value has unrecognized type",
 		}},
 	}},
 }, {
@@ -234,8 +224,7 @@ next§ §x=1§`,
 		Measurement: "next",
 		Fields: []FieldKeyValue{{
 			Key:   "x",
-			Kind:  Float,
-			Value: "1",
+			Value: 1.0,
 		}},
 	}},
 }, {
@@ -245,7 +234,6 @@ next§ §x=1§`,
 		Measurement: "TestBucket",
 		Fields: []FieldKeyValue{{
 			Key:   "TagOne",
-			Kind:  String,
 			Value: "Happy",
 		}},
 		TimeError: `invalid timestamp ("FieldOne=123.45")`,
@@ -257,8 +245,7 @@ next§ §x=1§`,
 		Measurement: "b",
 		Fields: []FieldKeyValue{{
 			Key:   "f",
-			Kind:  Float,
-			Value: "1",
+			Value: 1.0,
 		}},
 		Time: "",
 	}},
@@ -269,8 +256,7 @@ next§ §x=1§`,
 		Measurement: "b",
 		Fields: []FieldKeyValue{{
 			Key:   "f",
-			Kind:  Float,
-			Value: "1",
+			Value: 1.0,
 		}},
 		Time: "",
 	}},
@@ -281,10 +267,42 @@ next§ §x=1§`,
 		Measurement: "9",
 		Fields: []FieldKeyValue{{
 			Key:   "f",
-			Kind:  Float,
-			Value: "-7",
+			Value: -7.0,
 		}},
 		Time: "",
+	}},
+}, {
+	testName: "carriage-returns",
+	text:     "# foo\r\nm§ §x=1§\r\n\r\n",
+	expect: []Point{{
+		Measurement: "m",
+		Fields: []FieldKeyValue{{
+			Key:   "x",
+			Value: 1.0,
+		}},
+	}},
+}, {
+	testName: "carriage-return-in-comment",
+	text:     "§§§# foo\rxxx\n¶m§ §x=1§\r\n\r\n",
+	expect: []Point{{
+		MeasurementError: "invalid character found in comment line",
+	}, {
+		Measurement: "m",
+		Fields: []FieldKeyValue{{
+			Key:   "x",
+			Value: 1.0,
+		}},
+	}},
+}, {
+	// This test ensures that the ErrValueOutOfRange error is
+	// propagated correctly errors.Is
+	testName: "out-of-range-value",
+	text:     "m§ §f=1e9999999999999§",
+	expect: []Point{{
+		Measurement: "m",
+		Fields: []FieldKeyValue{{
+			Error: `cannot parse value for field key "f": line-protocol value out of range`,
+		}},
 	}},
 }}
 
@@ -313,12 +331,10 @@ func assertTokenizeResult(c *qt.C, tok *Tokenizer, expect []Point, allowMore boo
 			break
 		}
 		if i >= len(expect) {
-			c.Errorf("too many points found")
+			c.Fatalf("too many points found")
 		}
 		for _, checkSection := range sectionCheckers {
-			if i < len(expect) {
-				checkSection(c, tok, expect[i])
-			}
+			checkSection(c, tok, expect[i])
 		}
 		i++
 	}
@@ -420,11 +436,12 @@ func TestTokenizerSkipSection(t *testing.T) {
 					i := 0
 					for tok.Next() {
 						if i >= len(test.expect) {
-							c.Fatalf("too many points found")
+							continue
 						}
-						if e := expectedSectionError(test.expect[i], sect-1); e != "" {
+						if e := expectedSectionError(test.expect[i], sect-1); e != "" && !strings.Contains(e, "out of range") {
 							// If there's an error earlier in the line, it gets returned on the
-							// later section.
+							// later section (unless it's an out of range error, in which case it's technically valid
+							// syntax)
 							c.Assert(doSection(tok, sect), qt.ErrorMatches, regexp.QuoteMeta(e))
 						} else {
 							sectionCheckers[sect](c, tok, test.expect[i])
@@ -739,7 +756,6 @@ var scanEntriesBenchmarks = []struct {
 		}},
 		Fields: []FieldKeyValue{{
 			Key:   "field",
-			Kind:  String,
 			Value: strings.Repeat("a", 4500),
 		}},
 		Time: "1602841605822791506",
@@ -770,7 +786,6 @@ var scanEntriesBenchmarks = []struct {
 		}},
 		Fields: []FieldKeyValue{{
 			Key:   "field",
-			Kind:  String,
 			Value: strings.Repeat(`"`, 4500),
 		}},
 		Time: "1602841605822791506",
@@ -788,8 +803,7 @@ var scanEntriesBenchmarks = []struct {
 		}},
 		Fields: []FieldKeyValue{{
 			Key:   "y",
-			Kind:  Float,
-			Value: "1",
+			Value: 1.0,
 		}},
 		Time: "1602841605822791506",
 	},
@@ -804,8 +818,7 @@ var scanEntriesBenchmarks = []struct {
 		}},
 		Fields: []FieldKeyValue{{
 			Key:   "y",
-			Kind:  Float,
-			Value: "1",
+			Value: 1.0,
 		}},
 		Time: "1602841605822791506",
 	},
@@ -829,8 +842,7 @@ var scanEntriesBenchmarks = []struct {
 		}},
 		Fields: []FieldKeyValue{{
 			Key:   "y",
-			Kind:  Float,
-			Value: "1",
+			Value: 1.0,
 		}},
 		Time: "1602841605822791506",
 	},
@@ -841,8 +853,7 @@ var scanEntriesBenchmarks = []struct {
 		Measurement: "cpu",
 		Fields: []FieldKeyValue{{
 			Key:   `va\lue`,
-			Kind:  Float,
-			Value: "42",
+			Value: 42.0,
 		}},
 		Time: "1602841605822791506",
 	},
@@ -857,8 +868,7 @@ var scanEntriesBenchmarks = []struct {
 		}},
 		Fields: []FieldKeyValue{{
 			Key:   `value`,
-			Kind:  Float,
-			Value: "42",
+			Value: 42.0,
 		}},
 		Time: "1602841605822791506",
 	},
@@ -876,212 +886,160 @@ var scanEntriesBenchmarks = []struct {
 		}},
 		Fields: []FieldKeyValue{{
 			Key:   "voluntary_context_switches",
-			Kind:  Int,
-			Value: "42",
+			Value: int64(42),
 		}, {
 			Key:   "memory_rss",
-			Kind:  Int,
-			Value: "5103616",
+			Value: int64(5103616),
 		}, {
 			Key:   "rlimit_memory_data_hard",
-			Kind:  Int,
-			Value: "2147483647",
+			Value: int64(2147483647),
 		}, {
 			Key:   "cpu_time_user",
-			Kind:  Float,
-			Value: "0.02",
+			Value: 0.02,
 		}, {
 			Key:   "rlimit_file_locks_soft",
-			Kind:  Int,
-			Value: "2147483647",
+			Value: int64(2147483647),
 		}, {
 			Key:   "pid",
-			Kind:  Int,
-			Value: "29417",
+			Value: int64(29417),
 		}, {
 			Key:   "cpu_time_nice",
-			Kind:  Float,
-			Value: "0",
+			Value: 0.0,
 		}, {
 			Key:   "rlimit_memory_locked_soft",
-			Kind:  Int,
-			Value: "65536",
+			Value: int64(65536),
 		}, {
 			Key:   "read_count",
-			Kind:  Int,
-			Value: "259",
+			Value: int64(259),
 		}, {
 			Key:   "rlimit_memory_vms_hard",
-			Kind:  Int,
-			Value: "2147483647",
+			Value: int64(2147483647),
 		}, {
 			Key:   "memory_swap",
-			Kind:  Int,
-			Value: "0",
+			Value: int64(0),
 		}, {
 			Key:   "rlimit_num_fds_soft",
-			Kind:  Int,
-			Value: "1024",
+			Value: int64(1024),
 		}, {
 			Key:   "rlimit_nice_priority_hard",
-			Kind:  Int,
-			Value: "0",
+			Value: int64(0),
 		}, {
 			Key:   "cpu_time_soft_irq",
-			Kind:  Float,
-			Value: "0",
+			Value: 0.0,
 		}, {
 			Key:   "cpu_time",
-			Kind:  Int,
-			Value: "0",
+			Value: int64(0),
 		}, {
 			Key:   "rlimit_memory_locked_hard",
-			Kind:  Int,
-			Value: "65536",
+			Value: int64(65536),
 		}, {
 			Key:   "realtime_priority",
-			Kind:  Int,
-			Value: "0",
+			Value: int64(0),
 		}, {
 			Key:   "signals_pending",
-			Kind:  Int,
-			Value: "0",
+			Value: int64(0),
 		}, {
 			Key:   "nice_priority",
-			Kind:  Int,
-			Value: "20",
+			Value: int64(20),
 		}, {
 			Key:   "cpu_time_idle",
-			Kind:  Float,
-			Value: "0",
+			Value: 0.0,
 		}, {
 			Key:   "memory_stack",
-			Kind:  Int,
-			Value: "139264",
+			Value: int64(139264),
 		}, {
 			Key:   "memory_locked",
-			Kind:  Int,
-			Value: "0",
+			Value: int64(0),
 		}, {
 			Key:   "rlimit_memory_stack_soft",
-			Kind:  Int,
-			Value: "8388608",
+			Value: int64(8388608),
 		}, {
 			Key:   "cpu_time_iowait",
-			Kind:  Float,
-			Value: "0",
+			Value: 0.0,
 		}, {
 			Key:   "cpu_time_guest",
-			Kind:  Float,
-			Value: "0",
+			Value: 0.0,
 		}, {
 			Key:   "cpu_time_guest_nice",
-			Kind:  Float,
-			Value: "0",
+			Value: 0.0,
 		}, {
 			Key:   "rlimit_memory_data_soft",
-			Kind:  Int,
-			Value: "2147483647",
+			Value: int64(2147483647),
 		}, {
 			Key:   "read_bytes",
-			Kind:  Int,
-			Value: "0",
+			Value: int64(0),
 		}, {
 			Key:   "rlimit_cpu_time_soft",
-			Kind:  Int,
-			Value: "2147483647",
+			Value: int64(2147483647),
 		}, {
 			Key:   "involuntary_context_switches",
-			Kind:  Int,
-			Value: "2",
+			Value: int64(2),
 		}, {
 			Key:   "write_bytes",
-			Kind:  Int,
-			Value: "106496",
+			Value: int64(106496),
 		}, {
 			Key:   "cpu_time_system",
-			Kind:  Float,
-			Value: "0",
+			Value: 0.0,
 		}, {
 			Key:   "cpu_time_irq",
-			Kind:  Float,
-			Value: "0",
+			Value: 0.0,
 		}, {
 			Key:   "cpu_usage",
-			Kind:  Float,
-			Value: "0",
+			Value: 0.0,
 		}, {
 			Key:   "memory_vms",
-			Kind:  Int,
-			Value: "21659648",
+			Value: int64(21659648),
 		}, {
 			Key:   "memory_data",
-			Kind:  Int,
-			Value: "1576960",
+			Value: int64(1576960),
 		}, {
 			Key:   "rlimit_memory_stack_hard",
-			Kind:  Int,
-			Value: "2147483647",
+			Value: int64(2147483647),
 		}, {
 			Key:   "num_threads",
-			Kind:  Int,
-			Value: "1",
+			Value: int64(1),
 		}, {
 			Key:   "rlimit_memory_rss_soft",
-			Kind:  Int,
-			Value: "2147483647",
+			Value: int64(2147483647),
 		}, {
 			Key:   "rlimit_realtime_priority_soft",
-			Kind:  Int,
-			Value: "0",
+			Value: int64(0),
 		}, {
 			Key:   "num_fds",
-			Kind:  Int,
-			Value: "4",
+			Value: int64(4),
 		}, {
 			Key:   "write_count",
-			Kind:  Int,
-			Value: "35",
+			Value: int64(35),
 		}, {
 			Key:   "rlimit_signals_pending_soft",
-			Kind:  Int,
-			Value: "78994",
+			Value: int64(78994),
 		}, {
 			Key:   "cpu_time_steal",
-			Kind:  Float,
-			Value: "0",
+			Value: 0.0,
 		}, {
 			Key:   "rlimit_num_fds_hard",
-			Kind:  Int,
-			Value: "4096",
+			Value: int64(4096),
 		}, {
 			Key:   "rlimit_file_locks_hard",
-			Kind:  Int,
-			Value: "2147483647",
+			Value: int64(2147483647),
 		}, {
 			Key:   "rlimit_cpu_time_hard",
-			Kind:  Int,
-			Value: "2147483647",
+			Value: int64(2147483647),
 		}, {
 			Key:   "rlimit_signals_pending_hard",
-			Kind:  Int,
-			Value: "78994",
+			Value: int64(78994),
 		}, {
 			Key:   "rlimit_nice_priority_soft",
-			Kind:  Int,
-			Value: "0",
+			Value: int64(0),
 		}, {
 			Key:   "rlimit_memory_rss_hard",
-			Kind:  Int,
-			Value: "2147483647",
+			Value: int64(2147483647),
 		}, {
 			Key:   "rlimit_memory_vms_soft",
-			Kind:  Int,
-			Value: "2147483647",
+			Value: int64(2147483647),
 		}, {
 			Key:   "rlimit_realtime_priority_hard",
-			Kind:  Int,
-			Value: "0",
+			Value: int64(0),
 		}},
 		Time: "1517620624000000000",
 	},
