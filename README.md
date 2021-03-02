@@ -1,6 +1,6 @@
 # line-protocol
 
-This is an encoder for the influx [line protocol.](https://docs.influxdata.com/influxdb/latest/write_protocols/line_protocol_reference/)
+This is an encoder for the influx [line protocol.](https://docs.influxdata.com/influxdb/latest/reference/syntax/line-protocol/)
 
 It has an interface similar to the standard library's `json.Encoder`.
 
