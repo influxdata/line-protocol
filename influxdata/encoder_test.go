@@ -65,14 +65,14 @@ func TestEncoderErrorOmitsLine(t *testing.T) {
 	c.Assert(string(e.Bytes()), qt.Equals, "m1 f=1i\nm2")
 	e.AddField("g", MustNewValue(int64(3)))
 	e.AddField("\\", MustNewValue(int64(4)))
-	c.Assert(e.Err(), qt.ErrorMatches, `invalid field key "\\\\"`)
+	c.Assert(e.Err(), qt.ErrorMatches, `encoding point 2: invalid field key "\\\\"`)
 	c.Assert(string(e.Bytes()), qt.Equals, "m1 f=1i")
 
 	// Check that we can add a new line while retaining the first error.
 	e.StartLine("m3")
 	e.AddField("f", MustNewValue(int64(3)))
 	c.Assert(string(e.Bytes()), qt.Equals, "m1 f=1i\nm3 f=3i")
-	c.Assert(e.Err(), qt.ErrorMatches, `invalid field key "\\\\"`)
+	c.Assert(e.Err(), qt.ErrorMatches, `encoding point 2: invalid field key "\\\\"`)
 }
 
 func TestEncoderErrorWithOutOfOrderTags(t *testing.T) {
@@ -121,7 +121,7 @@ func TestEncoderStartLineWithNoFieldsOnPreviousLine(t *testing.T) {
 	var e Encoder
 	e.StartLine("m")
 	e.StartLine("n")
-	c.Assert(e.Err(), qt.ErrorMatches, `cannot start line without adding at least one field to previous line`)
+	c.Assert(e.Err(), qt.ErrorMatches, `encoding point 1: cannot start line without adding at least one field to previous line`)
 }
 
 func TestEncoderStartLineWithInvalidMeasurementAndNoFieldsOnPreviousLine(t *testing.T) {
@@ -129,7 +129,7 @@ func TestEncoderStartLineWithInvalidMeasurementAndNoFieldsOnPreviousLine(t *test
 	var e Encoder
 	e.StartLine("m")
 	e.StartLine("")
-	c.Assert(e.Err(), qt.ErrorMatches, `cannot start line without adding at least one field to previous line`)
+	c.Assert(e.Err(), qt.ErrorMatches, `encoding point 1: cannot start line without adding at least one field to previous line`)
 
 	// The current line is now in error state, so fields won't be added.
 	e.AddField("f", MustNewValue(int64(1)))
@@ -297,7 +297,7 @@ func TestEncoderDataError(t *testing.T) {
 			c.Assert(e.Err(), qt.IsNil)
 			initialBytes := string(e.Bytes())
 			encodePoint(&e, test.point)
-			c.Assert(e.Err(), qt.ErrorMatches, test.expectError)
+			c.Assert(e.Err(), qt.ErrorMatches, "encoding point 1: "+test.expectError)
 
 			// Check that the original line is still intact without any of
 			// the new one.
