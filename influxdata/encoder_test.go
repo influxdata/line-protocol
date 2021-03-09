@@ -10,10 +10,10 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-func TestEncoderWithTokenizerTests(t *testing.T) {
+func TestEncoderWithDecoderTests(t *testing.T) {
 	c := qt.New(t)
 	runTests := func(c *qt.C, lax bool) {
-		for _, test := range tokenizerTests {
+		for _, test := range decoderTests {
 			if pointsHaveError(test.expect) {
 				// Can't encode a test that results in an error.
 				continue
@@ -34,8 +34,8 @@ func TestEncoderWithTokenizerTests(t *testing.T) {
 				data := e.Bytes()
 				c.Logf("encoded: %q", data)
 				// Check that the data round-trips OK
-				tok := NewTokenizerWithBytes(data)
-				assertTokenizeResult(c, tok, points, false)
+				dec := NewDecoderWithBytes(data)
+				assertDecodeResult(c, dec, points, false)
 			})
 		}
 	}

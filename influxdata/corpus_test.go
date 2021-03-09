@@ -52,7 +52,7 @@ func TestCorpusDecode(t *testing.T) {
 	for _, test := range corpus {
 		c.Run(test.Input.Key, func(c *qt.C) {
 			precision := fromCorpusPrecision(test.Input.Precision)
-			m, err := tokenizeToCorpusMetrics(test.Input.Text, precision, test.Input.DefaultTime)
+			m, err := decodeToCorpusMetrics(test.Input.Text, precision, test.Input.DefaultTime)
 			// We'll treat it as success if we match any of the result
 			ok := false
 			validResults := 0
@@ -90,7 +90,7 @@ func TestCorpusDecode(t *testing.T) {
 				return
 			}
 			if err != nil {
-				c.Errorf("all implementations succeeded but Tokenize failed with error: %v", err)
+				c.Errorf("all implementations succeeded but Decode failed with error: %v", err)
 				return
 			}
 			c.Errorf("result doesn't match any implementation")
@@ -117,7 +117,7 @@ func TestCorpusEncode(t *testing.T) {
 			if err == nil {
 				// The encoding succeeded. Check that we can round-trip back to the
 				// original values.
-				ms, err := tokenizeToCorpusMetrics(data, precision, 0)
+				ms, err := decodeToCorpusMetrics(data, precision, 0)
 				if c.Check(err, qt.IsNil) {
 					c.Check(ms, qt.HasLen, 1)
 					c.Check(ms[0], qt.DeepEquals, test.Input.Metric)
@@ -207,11 +207,11 @@ func hasBackslashVIssue(s []byte) bool {
 	return false
 }
 
-func tokenizeToCorpusMetrics(text []byte, precision Precision, defaultTime int64) ([]*corpusMetric, error) {
-	tok := NewTokenizerWithBytes(text)
+func decodeToCorpusMetrics(text []byte, precision Precision, defaultTime int64) ([]*corpusMetric, error) {
+	dec := NewDecoderWithBytes(text)
 	ms := []*corpusMetric{}
-	for tok.Next() {
-		m, err := tokenizeToCorpusMetric(tok, precision, defaultTime)
+	for dec.Next() {
+		m, err := decodeToCorpusMetric(dec, precision, defaultTime)
 		if err != nil {
 			return nil, fmt.Errorf("cannot get metric for point %d: %v", len(ms), err)
 		}
@@ -220,18 +220,18 @@ func tokenizeToCorpusMetrics(text []byte, precision Precision, defaultTime int64
 	return ms, nil
 }
 
-func tokenizeToCorpusMetric(tok *Tokenizer, precision Precision, defaultTime int64) (*corpusMetric, error) {
+func decodeToCorpusMetric(dec *Decoder, precision Precision, defaultTime int64) (*corpusMetric, error) {
 	m := corpusMetric{
 		Tags:   []corpusTag{},
 		Fields: []corpusField{},
 	}
 	var err error
-	m.Name, err = tok.Measurement()
+	m.Name, err = dec.Measurement()
 	if err != nil {
 		return nil, fmt.Errorf("cannot get measurement: %v", err)
 	}
 	for {
-		key, val, err := tok.NextTag()
+		key, val, err := dec.NextTag()
 		if err != nil {
 			return nil, fmt.Errorf("cannot get tag %v: %v", len(m.Tags), err)
 		}
@@ -252,7 +252,7 @@ func tokenizeToCorpusMetric(tok *Tokenizer, precision Precision, defaultTime int
 		}
 	}
 	for {
-		key, val, err := tok.NextField()
+		key, val, err := dec.NextField()
 		if err != nil {
 			return nil, fmt.Errorf("cannot get field %d: %v", len(m.Fields), err)
 		}
@@ -284,7 +284,7 @@ func tokenizeToCorpusMetric(tok *Tokenizer, precision Precision, defaultTime int
 		m.Fields = append(m.Fields, field)
 	}
 
-	timestamp, err := tok.Time(precision, time.Unix(0, defaultTime))
+	timestamp, err := dec.Time(precision, time.Unix(0, defaultTime))
 	if err != nil {
 		return nil, fmt.Errorf("cannot get time: %v", err)
 	}

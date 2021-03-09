@@ -213,7 +213,7 @@ func (e *Encoder) AddField(key string, value Value) {
 // TODO would it be better for this to be:
 //	AddFieldRaw(key []byte, kind ValueKind, data []byte) error
 // so that we could respect lax and be more efficient when reading directly
-// from a Tokenizer?
+// from a Decoder?
 func (e *Encoder) AddFieldRaw(key []byte, value Value) {
 	e.AddField(unsafeBytesToString(key), value)
 }

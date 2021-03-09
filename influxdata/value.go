@@ -46,7 +46,7 @@ func (v1 Value) Equal(v2 Value) bool {
 }
 
 // NewValueFromBytes creates a value of the given kind with the
-// given data, as returned from Tokenizer.NextFieldBytes.
+// given data, as returned from Decoder.NextFieldBytes.
 //
 // If the value is out of range, errors.Is(err, ErrValueOutOfRange) will return true.
 //
