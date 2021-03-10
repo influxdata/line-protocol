@@ -35,6 +35,8 @@ type Encoder struct {
 	lineHasError bool
 	// err holds the most recent error encountered when encoding.
 	err error
+	// pointIndex holds the index of the current point being encoded.
+	pointIndex int
 	// precisionMultiplier holds the timestamp precision.
 	// Timestamps are divided by this when encoded.
 	precisionMultiplier int64
@@ -51,6 +53,7 @@ func (e *Encoder) Bytes() []byte {
 // Encoded data will be appended to buf.
 func (e *Encoder) SetBuffer(buf []byte) {
 	e.buf = buf
+	e.pointIndex = 0
 	e.ClearErr()
 	e.section = MeasurementSection
 }
@@ -101,6 +104,7 @@ func (e *Encoder) ClearErr() {
 // encoding the previous entry.
 func (e *Encoder) StartLine(measurement string) {
 	section := e.section
+	e.pointIndex++
 	e.section = TagSection
 	if section == TagSection {
 		// This error is unusual, because it indicates an error on the previous
@@ -110,14 +114,14 @@ func (e *Encoder) StartLine(measurement string) {
 		// adding a line with no fields, you won't ever see the second
 		// of those two errors. Clients can avoid that possibility by making
 		// sure to call EndLine even if they don't wish to add a timestamp.
-		e.setError(fmt.Errorf("cannot start line without adding at least one field to previous line"))
+		e.setErrorf("cannot start line without adding at least one field to previous line")
 	}
 	e.prevTagKey = e.prevTagKey[:0]
 	e.lineStart = len(e.buf)
 	e.lineHasError = false
 	if !e.lax {
 		if !validMeasurementOrKey(measurement) {
-			e.setError(fmt.Errorf("invalid measurement %q", measurement))
+			e.setErrorf("invalid measurement %q", measurement)
 			return
 		}
 	}
@@ -142,20 +146,20 @@ func (e *Encoder) StartLineRaw(name []byte) {
 // a trailing backslash character.
 func (e *Encoder) AddTag(key, value string) {
 	if e.section != TagSection {
-		e.setError(fmt.Errorf("tag must be added after adding a measurement and before adding fields"))
+		e.setErrorf("tag must be added after adding a measurement and before adding fields")
 		return
 	}
 	if !e.lax {
 		if !validMeasurementOrKey(key) {
-			e.setError(fmt.Errorf("invalid tag key %q", key))
+			e.setErrorf("invalid tag key %q", key)
 			return
 		}
 		if !validMeasurementOrKey(value) {
-			e.setError(fmt.Errorf("invalid tag value %s=%q", key, value))
+			e.setErrorf("invalid tag value %s=%q", key, value)
 			return
 		}
 		if key <= string(e.prevTagKey) {
-			e.setError(fmt.Errorf("tag key %q out of order (previous key %q)", key, e.prevTagKey))
+			e.setErrorf("tag key %q out of order (previous key %q)", key, e.prevTagKey)
 			return
 		}
 		// We need to copy the tag key because AddTag can be called
@@ -184,14 +188,14 @@ func (e *Encoder) AddTagRaw(key, value []byte) {
 // or AddMeasurement. At least one field must be added to each line.
 func (e *Encoder) AddField(key string, value Value) {
 	if e.section != FieldSection && e.section != TagSection {
-		e.setError(fmt.Errorf("field must be added after tag or measurement section"))
+		e.setErrorf("field must be added after tag or measurement section")
 		return
 	}
 	section := e.section
 	e.section = FieldSection
 	if !e.lax {
 		if !validMeasurementOrKey(key) {
-			e.setError(fmt.Errorf("invalid field key %q", key))
+			e.setErrorf("invalid field key %q", key)
 			return
 		}
 	}
@@ -229,7 +233,7 @@ var (
 // an ErrRange error will be returned.
 func (e *Encoder) EndLine(t time.Time) {
 	if e.section != FieldSection {
-		e.setError(fmt.Errorf("timestamp must be added after adding at least one field"))
+		e.setErrorf("timestamp must be added after adding at least one field")
 		return
 	}
 	e.section = endSection
@@ -237,7 +241,7 @@ func (e *Encoder) EndLine(t time.Time) {
 		return
 	}
 	if t.Before(minTime) || t.After(maxTime) {
-		e.setError(fmt.Errorf("timestamp %s: %w", t.Format(time.RFC3339), ErrValueOutOfRange))
+		e.setErrorf("timestamp %s: %w", t.Format(time.RFC3339), ErrValueOutOfRange)
 		return
 	}
 	if e.lineHasError {
@@ -251,11 +255,14 @@ func (e *Encoder) EndLine(t time.Time) {
 	e.buf = strconv.AppendInt(e.buf, timestamp, 10)
 }
 
-func (e *Encoder) setError(err error) {
+func (e *Encoder) setErrorf(format string, arg ...interface{}) {
 	e.lineHasError = true
 	if e.err == nil {
-		// TODO make a value that includes the current point index.
-		e.err = err
+		if e.pointIndex <= 1 {
+			e.err = fmt.Errorf(format, arg...)
+		} else {
+			e.err = fmt.Errorf("encoding point %d: %w", e.pointIndex-1, fmt.Errorf(format, arg...))
+		}
 	}
 	// Remove the partially encoded part of the current line.
 	e.buf = e.buf[:e.lineStart]
