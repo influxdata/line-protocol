@@ -33,11 +33,11 @@ type Point struct {
 	TimeError        string
 }
 
-// sectionCheckers holds a function for each section that checks that the result of tokenization
+// sectionCheckers holds a function for each section that checks that the result of decoding
 // for that section is as expected.
-var sectionCheckers = []func(c *qt.C, tok *Tokenizer, expect Point){
-	MeasurementSection: func(c *qt.C, tok *Tokenizer, expect Point) {
-		m, err := tok.Measurement()
+var sectionCheckers = []func(c *qt.C, dec *Decoder, expect Point){
+	MeasurementSection: func(c *qt.C, dec *Decoder, expect Point) {
+		m, err := dec.Measurement()
 		if expect.MeasurementError != "" {
 			c.Assert(err, qt.ErrorMatches, regexp.QuoteMeta(expect.MeasurementError), qt.Commentf("measurement %q", m))
 			return
@@ -46,10 +46,10 @@ var sectionCheckers = []func(c *qt.C, tok *Tokenizer, expect Point){
 		c.Assert(err, qt.IsNil)
 		c.Assert(string(m), qt.Equals, expect.Measurement, qt.Commentf("runes: %x", []rune(string(m))))
 	},
-	TagSection: func(c *qt.C, tok *Tokenizer, expect Point) {
+	TagSection: func(c *qt.C, dec *Decoder, expect Point) {
 		var tags []TagKeyValue
 		for {
-			key, value, err := tok.NextTag()
+			key, value, err := dec.NextTag()
 			if err != nil {
 				c.Assert(key, qt.IsNil)
 				c.Assert(value, qt.IsNil)
@@ -68,10 +68,10 @@ var sectionCheckers = []func(c *qt.C, tok *Tokenizer, expect Point){
 		}
 		c.Assert(tags, qt.DeepEquals, expect.Tags)
 	},
-	FieldSection: func(c *qt.C, tok *Tokenizer, expect Point) {
+	FieldSection: func(c *qt.C, dec *Decoder, expect Point) {
 		var fields []FieldKeyValue
 		for {
-			key, value, err := tok.NextField()
+			key, value, err := dec.NextField()
 			if err != nil {
 				if s := err.Error(); strings.Contains(s, "out of range") {
 					if !errors.Is(err, ErrValueOutOfRange) {
@@ -94,8 +94,8 @@ var sectionCheckers = []func(c *qt.C, tok *Tokenizer, expect Point){
 		}
 		c.Assert(fields, qt.DeepEquals, expect.Fields)
 	},
-	TimeSection: func(c *qt.C, tok *Tokenizer, expect Point) {
-		timeBytes, err := tok.TimeBytes()
+	TimeSection: func(c *qt.C, dec *Decoder, expect Point) {
+		timeBytes, err := dec.TimeBytes()
 		if expect.TimeError != "" {
 			c.Assert(err, qt.ErrorMatches, regexp.QuoteMeta(expect.TimeError))
 			c.Assert(timeBytes, qt.IsNil)
@@ -110,9 +110,9 @@ var sectionCheckers = []func(c *qt.C, tok *Tokenizer, expect Point){
 	},
 }
 
-var tokenizerTests = []struct {
+var decoderTests = []struct {
 	testName string
-	// text holds the text to be tokenized.
+	// text holds the text to be decoded.
 	// sections are separated by § characters.
 	// entries are separated by ¶ characters.
 	text   string
@@ -306,35 +306,35 @@ next§ §x=1§`,
 	}},
 }}
 
-func TestTokenizer(t *testing.T) {
+func TestDecoder(t *testing.T) {
 	c := qt.New(t)
-	for _, test := range tokenizerTests {
+	for _, test := range decoderTests {
 		c.Run(test.testName, func(c *qt.C) {
 			// Remove section and entry separators, as we're testing all sections.
-			tok := NewTokenizerWithBytes([]byte(removeTestSeparators(test.text)))
-			assertTokenizeResult(c, tok, test.expect, false)
+			dec := NewDecoderWithBytes([]byte(removeTestSeparators(test.text)))
+			assertDecodeResult(c, dec, test.expect, false)
 		})
 	}
 }
 
-// assertTokenizeResult asserts that the tokens from tok match
+// assertDecodeResult asserts that the entries from dec match
 // the expected points and returns the number of points
 // consumed. If allowMore is true, it's OK for there
 // to be more points than expected.
-func assertTokenizeResult(c *qt.C, tok *Tokenizer, expect []Point, allowMore bool) int {
+func assertDecodeResult(c *qt.C, dec *Decoder, expect []Point, allowMore bool) int {
 	i := 0
 	for {
 		if i >= len(expect) && allowMore {
 			return i
 		}
-		if !tok.Next() {
+		if !dec.Next() {
 			break
 		}
 		if i >= len(expect) {
 			c.Fatalf("too many points found")
 		}
 		for _, checkSection := range sectionCheckers {
-			checkSection(c, tok, expect[i])
+			checkSection(c, dec, expect[i])
 		}
 		i++
 	}
@@ -342,9 +342,9 @@ func assertTokenizeResult(c *qt.C, tok *Tokenizer, expect []Point, allowMore boo
 	return i
 }
 
-func TestTokenizerAtSection(t *testing.T) {
+func TestDecoderAtSection(t *testing.T) {
 	c := qt.New(t)
-	for _, test := range tokenizerTests {
+	for _, test := range decoderTests {
 		c.Run(test.testName, func(c *qt.C) {
 			for secti := range sectionCheckers {
 				sect := Section(secti)
@@ -357,13 +357,13 @@ func TestTokenizerAtSection(t *testing.T) {
 						if expectedSectionError(test.expect[i], sect-1) != "" {
 							continue
 						}
-						// Tokenize all sections at sect and beyond unless there was
+						// Decode all sections at sect and beyond unless there was
 						// a previous error, in which case the parser
 						sectText := strings.Join(sections[sect:], "")
 						c.Logf("trying entry %d: %q", i, sectText)
-						tok := NewTokenizerAtSection([]byte(sectText), Section(sect))
+						dec := NewDecoderAtSection([]byte(sectText), Section(sect))
 						for _, checkSection := range sectionCheckers[sect:] {
-							checkSection(c, tok, test.expect[i])
+							checkSection(c, dec, test.expect[i])
 						}
 					}
 				})
@@ -372,19 +372,19 @@ func TestTokenizerAtSection(t *testing.T) {
 	}
 }
 
-func doSection(tok *Tokenizer, section Section) error {
+func doSection(dec *Decoder, section Section) error {
 	switch section {
 	case MeasurementSection:
-		_, err := tok.Measurement()
+		_, err := dec.Measurement()
 		return err
 	case TagSection:
-		_, _, err := tok.NextTag()
+		_, _, err := dec.NextTag()
 		return err
 	case FieldSection:
-		_, _, _, err := tok.NextFieldBytes()
+		_, _, _, err := dec.NextFieldBytes()
 		return err
 	case TimeSection:
-		_, err := tok.TimeBytes()
+		_, err := dec.TimeBytes()
 		return err
 	}
 	panic("unreachable")
@@ -421,20 +421,20 @@ func expectedSectionError(p Point, section Section) string {
 	return expectedSectionError(p, section-1)
 }
 
-func TestTokenizerSkipSection(t *testing.T) {
-	// This test tests that we can call an individual tokenization method
-	// without calling any of the others. The tokenization logic
-	// should skip the other tokens.
+func TestDecoderSkipSection(t *testing.T) {
+	// This test tests that we can call an individual decoder method
+	// without calling any of the others. The decoder logic
+	// should skip the other parts.
 	c := qt.New(t)
-	for _, test := range tokenizerTests {
+	for _, test := range decoderTests {
 		c.Run(test.testName, func(c *qt.C) {
 			for secti := range sectionCheckers {
 				sect := Section(secti)
 				c.Run(sect.String(), func(c *qt.C) {
 					// Remove section and entry separators, as we're scanning all sections.
-					tok := NewTokenizerWithBytes([]byte(removeTestSeparators(test.text)))
+					dec := NewDecoderWithBytes([]byte(removeTestSeparators(test.text)))
 					i := 0
-					for tok.Next() {
+					for dec.Next() {
 						if i >= len(test.expect) {
 							continue
 						}
@@ -442,9 +442,9 @@ func TestTokenizerSkipSection(t *testing.T) {
 							// If there's an error earlier in the line, it gets returned on the
 							// later section (unless it's an out of range error, in which case it's technically valid
 							// syntax)
-							c.Assert(doSection(tok, sect), qt.ErrorMatches, regexp.QuoteMeta(e))
+							c.Assert(doSection(dec, sect), qt.ErrorMatches, regexp.QuoteMeta(e))
 						} else {
-							sectionCheckers[sect](c, tok, test.expect[i])
+							sectionCheckers[sect](c, dec, test.expect[i])
 						}
 						i++
 					}
@@ -463,14 +463,14 @@ func removeTestSeparators(s string) string {
 	return s
 }
 
-func TestTokenizerTokenizeTagsOnly(t *testing.T) {
-	// One specific use case we'd like to support is that of tokenizing just
+func TestDecoderDecodeTagsOnly(t *testing.T) {
+	// One specific use case we'd like to support is that of decoding just
 	// the tags on their, own.
 	c := qt.New(t)
-	tok := NewTokenizerAtSection([]byte(`a=b,c=hello\,,d=e`), TagSection)
+	dec := NewDecoderAtSection([]byte(`a=b,c=hello\,,d=e`), TagSection)
 	var tags []TagKeyValue
 	for {
-		key, val, err := tok.NextTag()
+		key, val, err := dec.NextTag()
 		c.Assert(err, qt.IsNil)
 		if key == nil {
 			break
@@ -490,38 +490,38 @@ func TestTokenizerTokenizeTagsOnly(t *testing.T) {
 		Key:   "d",
 		Value: "e",
 	}})
-	_, _, err := tok.NextField()
+	_, _, err := dec.NextField()
 	c.Assert(err, qt.ErrorMatches, `expected field key but none found`)
 }
 
-var tokenizerTakeTests = []struct {
-	testName     string
-	newTokenizer func(s string) *Tokenizer
-	expectError  string
+var decoderTakeTests = []struct {
+	testName    string
+	newDecoder  func(s string) *Decoder
+	expectError string
 }{{
 	testName: "bytes",
-	newTokenizer: func(s string) *Tokenizer {
-		return NewTokenizerWithBytes([]byte(s))
+	newDecoder: func(s string) *Decoder {
+		return NewDecoderWithBytes([]byte(s))
 	},
 }, {
 	testName: "reader",
-	newTokenizer: func(s string) *Tokenizer {
-		return NewTokenizer(strings.NewReader(s))
+	newDecoder: func(s string) *Decoder {
+		return NewDecoder(strings.NewReader(s))
 	},
 }, {
 	testName: "one-byte-reader",
-	newTokenizer: func(s string) *Tokenizer {
-		return NewTokenizer(iotest.OneByteReader(strings.NewReader(s)))
+	newDecoder: func(s string) *Decoder {
+		return NewDecoder(iotest.OneByteReader(strings.NewReader(s)))
 	},
 }, {
 	testName: "data-err-reader",
-	newTokenizer: func(s string) *Tokenizer {
-		return NewTokenizer(iotest.DataErrReader(strings.NewReader(s)))
+	newDecoder: func(s string) *Decoder {
+		return NewDecoder(iotest.DataErrReader(strings.NewReader(s)))
 	},
 }, {
 	testName: "error-reader",
-	newTokenizer: func(s string) *Tokenizer {
-		return NewTokenizer(&errorReader{
+	newDecoder: func(s string) *Decoder {
+		return NewDecoder(&errorReader{
 			r:   strings.NewReader(s),
 			err: fmt.Errorf("some error"),
 		})
@@ -529,24 +529,24 @@ var tokenizerTakeTests = []struct {
 	expectError: "some error",
 }}
 
-// TestTokenizerTake tests the internal Tokenizer.take method.
-func TestTokenizerTake(t *testing.T) {
+// TestDecoderTake tests the internal Decoder.take method.
+func TestDecoderTake(t *testing.T) {
 	c := qt.New(t)
-	for _, test := range tokenizerTakeTests {
+	for _, test := range decoderTakeTests {
 		c.Run(test.testName, func(c *qt.C) {
 			s := "aabbcccddefga"
-			tok := test.newTokenizer(s)
-			data1 := tok.take(newByteSet("abc"))
+			dec := test.newDecoder(s)
+			data1 := dec.take(newByteSet("abc"))
 			c.Assert(string(data1), qt.Equals, "aabbccc")
 
-			data2 := tok.take(newByteSet("d"))
+			data2 := dec.take(newByteSet("d"))
 			c.Assert(string(data2), qt.Equals, "dd")
 
-			data3 := tok.take(newByteSet(" ").invert())
+			data3 := dec.take(newByteSet(" ").invert())
 			c.Assert(string(data3), qt.Equals, "efga")
-			c.Assert(tok.complete, qt.Equals, true)
+			c.Assert(dec.complete, qt.Equals, true)
 
-			data4 := tok.take(newByteSet(" ").invert())
+			data4 := dec.take(newByteSet(" ").invert())
 			c.Assert(string(data4), qt.Equals, "")
 
 			// Check that none of them have been overwritten.
@@ -554,9 +554,9 @@ func TestTokenizerTake(t *testing.T) {
 			c.Assert(string(data2), qt.Equals, "dd")
 			c.Assert(string(data3), qt.Equals, "efga")
 			if test.expectError != "" {
-				c.Assert(tok.err, qt.ErrorMatches, test.expectError)
+				c.Assert(dec.err, qt.ErrorMatches, test.expectError)
 			} else {
-				c.Assert(tok.err, qt.IsNil)
+				c.Assert(dec.err, qt.IsNil)
 			}
 		})
 	}
@@ -567,8 +567,8 @@ func TestLongTake(t *testing.T) {
 	// Test that we can take segments that are longer than the
 	// read buffer size.
 	src := strings.Repeat("abcdefgh", (minRead*3)/8)
-	tok := NewTokenizer(strings.NewReader(src))
-	data := tok.take(newByteSet("abcdefgh"))
+	dec := NewDecoder(strings.NewReader(src))
+	data := dec.take(newByteSet("abcdefgh"))
 	c.Assert(string(data), qt.Equals, src)
 }
 
@@ -578,79 +578,79 @@ func TestTakeWithReset(t *testing.T) {
 	// read buffer size.
 	lineCount := (minRead * 3) / 9
 	src := strings.Repeat("abcdefgh\n", lineCount)
-	tok := NewTokenizer(strings.NewReader(src))
+	dec := NewDecoder(strings.NewReader(src))
 	n := 0
 	for {
-		data := tok.take(newByteSet("abcdefgh"))
+		data := dec.take(newByteSet("abcdefgh"))
 		if len(data) == 0 {
 			break
 		}
 		n++
 		c.Assert(string(data), qt.Equals, "abcdefgh")
-		b := tok.at(0)
+		b := dec.at(0)
 		c.Assert(b, qt.Equals, byte('\n'))
-		tok.advance(1)
-		tok.reset()
+		dec.advance(1)
+		dec.reset()
 	}
 	c.Assert(n, qt.Equals, lineCount)
 }
 
-func TestTokenizerTakeWithReset(t *testing.T) {
+func TestDecoderTakeWithReset(t *testing.T) {
 	c := qt.New(t)
 	// With a byte-at-a-time reader, we won't read any more
 	// than we absolutely need.
-	tok := NewTokenizer(iotest.OneByteReader(strings.NewReader("aabbcccddefg")))
-	data1 := tok.take(newByteSet("abc"))
+	dec := NewDecoder(iotest.OneByteReader(strings.NewReader("aabbcccddefg")))
+	data1 := dec.take(newByteSet("abc"))
 	c.Assert(string(data1), qt.Equals, "aabbccc")
-	c.Assert(tok.at(0), qt.Equals, byte('d'))
-	tok.advance(1)
-	tok.reset()
-	c.Assert(tok.r0, qt.Equals, 0)
-	c.Assert(tok.r1, qt.Equals, 0)
+	c.Assert(dec.at(0), qt.Equals, byte('d'))
+	dec.advance(1)
+	dec.reset()
+	c.Assert(dec.r0, qt.Equals, 0)
+	c.Assert(dec.r1, qt.Equals, 0)
 }
 
-func TestTokenizerTakeEsc(t *testing.T) {
+func TestDecoderTakeEsc(t *testing.T) {
 	c := qt.New(t)
-	for _, test := range tokenizerTakeTests {
+	for _, test := range decoderTakeTests {
 		c.Run(test.testName, func(c *qt.C) {
-			tok := test.newTokenizer(`hello\ \t\\z\XY`)
-			data := tok.takeEsc(newByteSet("X").invert(), &newEscaper(" \t").revTable)
+			dec := test.newDecoder(`hello\ \t\\z\XY`)
+			data := dec.takeEsc(newByteSet("X").invert(), &newEscaper(" \t").revTable)
 			c.Assert(string(data), qt.Equals, "hello \t\\\\z\\")
 
 			// Check that an escaped character will be included when
 			// it's not part of the take set.
-			tok = test.newTokenizer(`hello\ \t\\z\XYX`)
-			data1 := tok.takeEsc(newByteSet("X").invert(), &newEscaper("X \t").revTable)
+			dec = test.newDecoder(`hello\ \t\\z\XYX`)
+			data1 := dec.takeEsc(newByteSet("X").invert(), &newEscaper("X \t").revTable)
 			c.Assert(string(data1), qt.Equals, "hello \t\\\\zXY")
 
 			// Check that the next call to takeEsc continues where it left off.
-			data2 := tok.takeEsc(newByteSet(" ").invert(), &newEscaper(" ").revTable)
+			data2 := dec.takeEsc(newByteSet(" ").invert(), &newEscaper(" ").revTable)
 			c.Assert(string(data2), qt.Equals, "X")
 			// Check that data1 hasn't been overwritten.
 			c.Assert(string(data1), qt.Equals, "hello \t\\\\zXY")
 
 			// Check that a backslash followed by EOF is taken as literal.
-			tok = test.newTokenizer(`x\`)
-			data = tok.takeEsc(newByteSet("").invert(), &newEscaper(" ").revTable)
+			dec = test.newDecoder(`x\`)
+			data = dec.takeEsc(newByteSet("").invert(), &newEscaper(" ").revTable)
 			c.Assert(string(data), qt.Equals, "x\\")
 		})
 	}
 }
 
-func TestTokenizerTakeEscSkipping(t *testing.T) {
+func TestDecoderTakeEscSkipping(t *testing.T) {
 	c := qt.New(t)
-	tok := NewTokenizer(strings.NewReader(`hello\ \t\\z\XY`))
-	tok.skipping = true
-	data := tok.takeEsc(newByteSet("X").invert(), &newEscaper(" \t").revTable)
+	dec := NewDecoder(strings.NewReader(`hello\ \t\\z\XY`))
+	dec.skipping = true
+	data := dec.takeEsc(newByteSet("X").invert(), &newEscaper(" \t").revTable)
 	// When skipping is true, the data isn't unquoted (that's just unnecessary extra work).
 	c.Assert(string(data), qt.Equals, `hello\ \t\\z\`)
 }
 
-func TestTokenizerTakeEscGrowBuffer(t *testing.T) {
-	// This test tests the code path in Tokenizer.readMore
+func TestDecoderTakeEscGrowBuffer(t *testing.T) {
+	// This test tests the code path in Decoder.readMore
 	// when the buffer needs to grow while we're reading a token.
 	c := qt.New(t)
-	tok := NewTokenizer(&nbyteReader{
+	dec := NewDecoder(&nbyteReader{
 		buf: []byte(`hello\ \ \ \  foo`),
 		next: []int{
 			len(`hello\`),
@@ -658,14 +658,14 @@ func TestTokenizerTakeEscGrowBuffer(t *testing.T) {
 			len(`  foo`),
 		},
 	})
-	data := tok.takeEsc(newByteSet(" ").invert(), &newEscaper(" ").revTable)
+	data := dec.takeEsc(newByteSet(" ").invert(), &newEscaper(" ").revTable)
 	c.Assert(string(data), qt.Equals, `hello    `)
-	data = tok.take(newByteSet("").invert())
+	data = dec.take(newByteSet("").invert())
 	c.Assert(string(data), qt.Equals, ` foo`)
 }
 
-func TestTokenizerTakeSlideBuffer(t *testing.T) {
-	// This test tests the code path in Tokenizer.readMore
+func TestDecoderTakeSlideBuffer(t *testing.T) {
+	// This test tests the code path in Decoder.readMore
 	// when the read buffer is large enough but the current
 	// data is inconveniently in the wrong place, so
 	// it gets slid to the front of the buffer.
@@ -674,20 +674,20 @@ func TestTokenizerTakeSlideBuffer(t *testing.T) {
 	// initially added buffer, leaving just a little left at the end,
 	// that will be moved to the front when we come to read that part.
 	firstToken := strings.Repeat("a", minGrow-4)
-	tok := NewTokenizer(strings.NewReader(firstToken + ` helloworld there`))
-	data := tok.take(newByteSet(" ").invert())
+	dec := NewDecoder(strings.NewReader(firstToken + ` helloworld there`))
+	data := dec.take(newByteSet(" ").invert())
 	c.Assert(string(data), qt.Equals, firstToken)
-	data = tok.take(newByteSet(" "))
+	data = dec.take(newByteSet(" "))
 	c.Assert(string(data), qt.Equals, " ")
 
 	// Reset the buffer. There's still the data from `helloworld` onwards that will remain in the buffer.
-	tok.reset()
+	dec.reset()
 
-	data = tok.take(newByteSet(" ").invert())
+	data = dec.take(newByteSet(" ").invert())
 	c.Assert(string(data), qt.Equals, "helloworld")
-	data = tok.take(newByteSet(" "))
+	data = dec.take(newByteSet(" "))
 	c.Assert(string(data), qt.Equals, " ")
-	data = tok.take(newByteSet(" ").invert())
+	data = dec.take(newByteSet(" ").invert())
 	c.Assert(string(data), qt.Equals, "there")
 }
 
@@ -1056,17 +1056,17 @@ func BenchmarkScanEntriesSkipping(b *testing.B) {
 		b.Run(bench.name, func(b *testing.B) {
 			data, total := bench.makeData()
 			c := qt.New(b)
-			// Sanity check that the tokenizer is doing what we're expecting.
+			// Sanity check that the decoder is doing what we're expecting.
 			// Only check the first entry because checking them all is slow.
-			tok := NewTokenizerWithBytes(data)
-			assertTokenizeResult(c, tok, []Point{bench.expect}, true)
+			dec := NewDecoderWithBytes(data)
+			assertDecodeResult(c, dec, []Point{bench.expect}, true)
 			b.ReportAllocs()
 			b.ResetTimer()
 			b.SetBytes(int64(len(data)))
 			for i := 0; i < b.N; i++ {
 				n := 0
-				tok := NewTokenizerWithBytes(data)
-				for tok.Next() {
+				dec := NewDecoderWithBytes(data)
+				for dec.Next() {
 					n++
 				}
 				if n != total {
@@ -1082,31 +1082,31 @@ func BenchmarkScanEntriesWithoutSkipping(b *testing.B) {
 		b.Run(bench.name, func(b *testing.B) {
 			data, total := bench.makeData()
 			c := qt.New(b)
-			// Sanity check that the tokenizer is doing what we're expecting.
+			// Sanity check that the decoder is doing what we're expecting.
 			// Only check the first entry because checking them all is slow.
-			tok := NewTokenizerWithBytes(data)
-			assertTokenizeResult(c, tok, []Point{bench.expect}, true)
+			dec := NewDecoderWithBytes(data)
+			assertDecodeResult(c, dec, []Point{bench.expect}, true)
 			b.ReportAllocs()
 			b.ResetTimer()
 			b.SetBytes(int64(len(data)))
 			for i := 0; i < b.N; i++ {
 				n := 0
-				tok := NewTokenizerWithBytes(data)
-				for tok.Next() {
-					tok.Measurement()
+				dec := NewDecoderWithBytes(data)
+				for dec.Next() {
+					dec.Measurement()
 					for {
-						key, _, _ := tok.NextTag()
+						key, _, _ := dec.NextTag()
 						if key == nil {
 							break
 						}
 					}
 					for {
-						key, _, _ := tok.NextField()
+						key, _, _ := dec.NextField()
 						if key == nil {
 							break
 						}
 					}
-					tok.TimeBytes()
+					dec.TimeBytes()
 					n++
 				}
 				if n != total {
@@ -1117,7 +1117,7 @@ func BenchmarkScanEntriesWithoutSkipping(b *testing.B) {
 	}
 }
 
-func BenchmarkTokenize(b *testing.B) {
+func BenchmarkDecode(b *testing.B) {
 	var buf bytes.Buffer
 	b.ReportAllocs()
 	total := 0
@@ -1133,35 +1133,35 @@ func BenchmarkTokenize(b *testing.B) {
 	esc := newEscaper(" \t")
 	whitespace := newByteSet(" \t")
 	word := newByteSet(" \t\n").invert()
-	tokBytes := buf.Bytes()
+	decBytes := buf.Bytes()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		n := 0
-		tok := NewTokenizerWithBytes(tokBytes)
+		dec := NewDecoderWithBytes(decBytes)
 		for {
-			tok.reset()
-			if !tok.ensure(1) {
+			dec.reset()
+			if !dec.ensure(1) {
 				break
 			}
-			tok.takeEsc(word, &esc.revTable)
-			tok.take(whitespace)
-			if !tok.ensure(1) {
+			dec.takeEsc(word, &esc.revTable)
+			dec.take(whitespace)
+			if !dec.ensure(1) {
 				break
 			}
-			tok.takeEsc(word, &esc.revTable)
-			tok.take(whitespace)
-			if !tok.ensure(1) {
+			dec.takeEsc(word, &esc.revTable)
+			dec.take(whitespace)
+			if !dec.ensure(1) {
 				break
 			}
-			tok.takeEsc(word, &esc.revTable)
-			tok.take(whitespace)
-			if !tok.ensure(1) {
+			dec.takeEsc(word, &esc.revTable)
+			dec.take(whitespace)
+			if !dec.ensure(1) {
 				break
 			}
-			if tok.at(0) != '\n' {
-				b.Fatalf("unexpected character %q at eol", string(rune(tok.at(0))))
+			if dec.at(0) != '\n' {
+				b.Fatalf("unexpected character %q at eol", string(rune(dec.at(0))))
 			}
-			tok.advance(1)
+			dec.advance(1)
 			n++
 		}
 		if n != total {
