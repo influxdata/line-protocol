@@ -259,7 +259,7 @@ func (t *Tokenizer) advanceTagComma() error {
 // fields precede the timestamp in the line-protocol entry.
 //
 // The returned value slice may not be valid: to
-// check its validity, use NewValueFromBytes, or use NextField.
+// check its validity, use NewValueFromBytes(kind, value), or use NextField.
 func (t *Tokenizer) NextFieldBytes() (key []byte, kind ValueKind, value []byte, err error) {
 	if ok, err := t.advanceToSection(FieldSection); err != nil {
 		return nil, Unknown, nil, err
@@ -339,8 +339,7 @@ func (t *Tokenizer) NextFieldBytes() (key []byte, kind ValueKind, value []byte, 
 	return fieldKey, fieldKind, fieldVal, nil
 }
 
-// takeEOL consumes a line terminator. It reports whether
-// a line terminator or the end of input was found.
+// takeEOL consumes input up until the next end of line.
 func (t *Tokenizer) takeEOL() bool {
 	if !t.ensure(1) {
 		// End of input.
@@ -379,7 +378,7 @@ func (t *Tokenizer) NextField() (key []byte, val Value, err error) {
 	if err != nil || key == nil {
 		return nil, Value{}, err
 	}
-	v, err := ParseValue(kind, data)
+	v, err := NewValueFromBytes(kind, data)
 	if err != nil {
 		return nil, Value{}, fmt.Errorf("cannot parse value for field key %q: %w", key, err)
 	}
