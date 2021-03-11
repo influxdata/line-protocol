@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 	"testing/iotest"
+	"unicode/utf8"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -33,26 +34,32 @@ type Point struct {
 	TimeError        string
 }
 
+func isDecodeError(err error) bool {
+	return errors.As(err, new(*DecodeError))
+}
+
 // sectionCheckers holds a function for each section that checks that the result of decoding
 // for that section is as expected.
-var sectionCheckers = []func(c *qt.C, dec *Decoder, expect Point){
-	MeasurementSection: func(c *qt.C, dec *Decoder, expect Point) {
+var sectionCheckers = []func(c *qt.C, dec *Decoder, expect Point, errp errPositions){
+	MeasurementSection: func(c *qt.C, dec *Decoder, expect Point, errp errPositions) {
 		m, err := dec.Measurement()
 		if expect.MeasurementError != "" {
-			c.Assert(err, qt.ErrorMatches, regexp.QuoteMeta(expect.MeasurementError), qt.Commentf("measurement %q", m))
+			c.Assert(err, qt.Satisfies, isDecodeError)
+			c.Assert(err, qt.ErrorMatches, regexp.QuoteMeta(errp.makeErr(expect.MeasurementError)), qt.Commentf("measurement %q", m))
 			return
 		}
 
 		c.Assert(err, qt.IsNil)
 		c.Assert(string(m), qt.Equals, expect.Measurement, qt.Commentf("runes: %x", []rune(string(m))))
 	},
-	TagSection: func(c *qt.C, dec *Decoder, expect Point) {
+	TagSection: func(c *qt.C, dec *Decoder, expect Point, errp errPositions) {
 		var tags []TagKeyValue
 		for {
 			key, value, err := dec.NextTag()
 			if err != nil {
 				c.Assert(key, qt.IsNil)
 				c.Assert(value, qt.IsNil)
+				c.Assert(err, qt.Satisfies, isDecodeError)
 				tags = append(tags, TagKeyValue{
 					Error: err.Error(),
 				})
@@ -66,9 +73,15 @@ var sectionCheckers = []func(c *qt.C, dec *Decoder, expect Point){
 				Value: string(value),
 			})
 		}
-		c.Assert(tags, qt.DeepEquals, expect.Tags)
+		// Translate the positions in the expected errors.
+		expectTags := append([]TagKeyValue(nil), expect.Tags...)
+		for i := range expectTags {
+			tag := &expectTags[i]
+			tag.Error = errp.makeErr(tag.Error)
+		}
+		c.Assert(tags, qt.DeepEquals, expectTags)
 	},
-	FieldSection: func(c *qt.C, dec *Decoder, expect Point) {
+	FieldSection: func(c *qt.C, dec *Decoder, expect Point, errp errPositions) {
 		var fields []FieldKeyValue
 		for {
 			key, value, err := dec.NextField()
@@ -78,6 +91,7 @@ var sectionCheckers = []func(c *qt.C, dec *Decoder, expect Point){
 						c.Errorf("out of range error not propagated to result error")
 					}
 				}
+				c.Assert(err, qt.Satisfies, isDecodeError)
 				c.Assert(key, qt.IsNil)
 				fields = append(fields, FieldKeyValue{
 					Error: err.Error(),
@@ -92,12 +106,19 @@ var sectionCheckers = []func(c *qt.C, dec *Decoder, expect Point){
 				Value: value.Interface(),
 			})
 		}
-		c.Assert(fields, qt.DeepEquals, expect.Fields)
+		// Translate the positions in the expected errors.
+		expectFields := append([]FieldKeyValue(nil), expect.Fields...)
+		for i := range expectFields {
+			field := &expectFields[i]
+			field.Error = errp.makeErr(field.Error)
+		}
+		c.Assert(fields, qt.DeepEquals, expectFields)
 	},
-	TimeSection: func(c *qt.C, dec *Decoder, expect Point) {
+	TimeSection: func(c *qt.C, dec *Decoder, expect Point, errp errPositions) {
 		timeBytes, err := dec.TimeBytes()
 		if expect.TimeError != "" {
-			c.Assert(err, qt.ErrorMatches, regexp.QuoteMeta(expect.TimeError))
+			c.Assert(err, qt.Satisfies, isDecodeError)
+			c.Assert(err, qt.ErrorMatches, regexp.QuoteMeta(errp.makeErr(expect.TimeError)))
 			c.Assert(timeBytes, qt.IsNil)
 			return
 		}
@@ -115,6 +136,9 @@ var decoderTests = []struct {
 	// text holds the text to be decoded.
 	// sections are separated by § characters.
 	// entries are separated by ¶ characters.
+	// the position of an error is marked by a ∑ character (the error
+	// contains a corresponding ∑ character, signifying that
+	// it's expected to be a DecodeError at that error position.
 	text   string
 	expect []Point
 }{{
@@ -207,19 +231,19 @@ var decoderTests = []struct {
 	}},
 }, {
 	testName: "missing-quotes",
-	text:     `TestBucket§ §FieldOne=Happy,FieldTwo=sad§`,
+	text:     `TestBucket§ §FieldOné=∑¹Happy,FieldTwo=sad§`,
 	expect: []Point{{
 		Measurement: "TestBucket",
 		Fields: []FieldKeyValue{{
-			Error: "field value has unrecognized type",
+			Error: "at line ∑¹: field value has unrecognized type",
 		}},
 	}},
 }, {
 	testName: "trailing-comma-after-measurement",
-	text: `TestBucket,§ §FieldOne=Happy§¶
+	text: `TestBuckét,∑¹§ §FieldOne=Happy§¶
 next§ §x=1§`,
 	expect: []Point{{
-		MeasurementError: "expected tag key after comma; got white space instead",
+		MeasurementError: "at line ∑¹: expected tag key after comma; got white space instead",
 	}, {
 		Measurement: "next",
 		Fields: []FieldKeyValue{{
@@ -229,14 +253,14 @@ next§ §x=1§`,
 	}},
 }, {
 	testName: "missing-comma-after-field",
-	text:     `TestBucket§ §TagOne="Happy" §FieldOne=123.45`,
+	text:     `TestBuckét§ §TagOné="Happy" §∑¹FieldOne=123.45`,
 	expect: []Point{{
-		Measurement: "TestBucket",
+		Measurement: "TestBuckét",
 		Fields: []FieldKeyValue{{
-			Key:   "TagOne",
+			Key:   "TagOné",
 			Value: "Happy",
 		}},
-		TimeError: `invalid timestamp ("FieldOne=123.45")`,
+		TimeError: `at line ∑¹: invalid timestamp ("FieldOne=123.45")`,
 	}},
 }, {
 	testName: "missing timestamp",
@@ -283,9 +307,9 @@ next§ §x=1§`,
 	}},
 }, {
 	testName: "carriage-return-in-comment",
-	text:     "§§§# foo\rxxx\n¶m§ §x=1§\r\n\r\n",
+	text:     "§§§∑¹# foo\rxxx\n¶m§ §x=1§\r\n\r\n",
 	expect: []Point{{
-		MeasurementError: "invalid character found in comment line",
+		MeasurementError: "at line ∑¹: invalid character found in comment line",
 	}, {
 		Measurement: "m",
 		Fields: []FieldKeyValue{{
@@ -295,13 +319,13 @@ next§ §x=1§`,
 	}},
 }, {
 	// This test ensures that the ErrValueOutOfRange error is
-	// propagated correctly errors.Is
+	// propagated correctly with errors.Is
 	testName: "out-of-range-value",
-	text:     "m§ §f=1e9999999999999§",
+	text:     "mmmé§ §é=∑¹1e9999999999999§",
 	expect: []Point{{
-		Measurement: "m",
+		Measurement: "mmmé",
 		Fields: []FieldKeyValue{{
-			Error: `cannot parse value for field key "f": line-protocol value out of range`,
+			Error: `at line ∑¹: cannot parse value for field key "é": line-protocol value out of range`,
 		}},
 	}},
 }, {
@@ -310,14 +334,38 @@ next§ §x=1§`,
 	// if we ever change error behaviour so that the caller
 	// can see multiple errors on a single line, this test should
 	// fail (see comment in the Next method).
-	text: "m§ §f=1,\x01=1,\x01=2§",
+	text: "m§ §f=1,∑¹\x01=1,\x01=2§",
 	expect: []Point{{
 		Measurement: "m",
 		Fields: []FieldKeyValue{{
 			Key:   "f",
 			Value: 1.0,
 		}, {
-			Error: `invalid character '\x01' found at start of field key`,
+			Error: `at line ∑¹: invalid character '\x01' found at start of field key`,
+		}},
+	}},
+}, {
+	testName: "field-value-error-after-newline-in-string",
+	text:     "m§ §f=\"hello\ngoodbye\nx\",gé=∑¹invalid§",
+	expect: []Point{{
+		Measurement: "m",
+		Fields: []FieldKeyValue{{
+			Key:   "f",
+			Value: "hello\ngoodbye\nx",
+		}, {
+			Error: `at line ∑¹: field value has unrecognized type`,
+		}},
+	}},
+}, {
+	testName: "field-string-value-error-after-newline-in-string",
+	text:     "m§ §f=\"a\nb\",g=∑¹\"c\nd§",
+	expect: []Point{{
+		Measurement: "m",
+		Fields: []FieldKeyValue{{
+			Key:   "f",
+			Value: "a\nb",
+		}, {
+			Error: `at line ∑¹: expected closing quote for string field value, found end of input`,
 		}},
 	}},
 }}
@@ -327,8 +375,9 @@ func TestDecoder(t *testing.T) {
 	for _, test := range decoderTests {
 		c.Run(test.testName, func(c *qt.C) {
 			// Remove section and entry separators, as we're testing all sections.
-			dec := NewDecoderWithBytes([]byte(removeTestSeparators(test.text)))
-			assertDecodeResult(c, dec, test.expect, false)
+			errp, text := makeErrPositions(test.text)
+			dec := NewDecoderWithBytes([]byte(removeTestSeparators(text)))
+			assertDecodeResult(c, dec, test.expect, false, errp)
 		})
 	}
 }
@@ -337,7 +386,7 @@ func TestDecoder(t *testing.T) {
 // the expected points and returns the number of points
 // consumed. If allowMore is true, it's OK for there
 // to be more points than expected.
-func assertDecodeResult(c *qt.C, dec *Decoder, expect []Point, allowMore bool) int {
+func assertDecodeResult(c *qt.C, dec *Decoder, expect []Point, allowMore bool, errp errPositions) int {
 	i := 0
 	for {
 		if i >= len(expect) && allowMore {
@@ -350,7 +399,7 @@ func assertDecodeResult(c *qt.C, dec *Decoder, expect []Point, allowMore bool) i
 			c.Fatalf("too many points found")
 		}
 		for _, checkSection := range sectionCheckers {
-			checkSection(c, dec, expect[i])
+			checkSection(c, dec, expect[i], errp)
 		}
 		i++
 	}
@@ -370,16 +419,19 @@ func TestDecoderAtSection(t *testing.T) {
 					for i, entry := range entries {
 						sections := strings.Split(entry, "§")
 						c.Assert(sections, qt.HasLen, int(TimeSection)+1)
+						// Decode all sections at sect and beyond unless there was
+						// a previous error, in which case the parser will have consumed
+						// the rest of the line.
 						if expectedSectionError(test.expect[i], sect-1) != "" {
 							continue
 						}
-						// Decode all sections at sect and beyond unless there was
-						// a previous error, in which case the parser
 						sectText := strings.Join(sections[sect:], "")
+						errp, sectText := makeErrPositions(sectText)
+
 						c.Logf("trying entry %d: %q", i, sectText)
 						dec := NewDecoderAtSection([]byte(sectText), Section(sect))
 						for _, checkSection := range sectionCheckers[sect:] {
-							checkSection(c, dec, test.expect[i])
+							checkSection(c, dec, test.expect[i], errp)
 						}
 					}
 				})
@@ -448,7 +500,8 @@ func TestDecoderSkipSection(t *testing.T) {
 				sect := Section(secti)
 				c.Run(sect.String(), func(c *qt.C) {
 					// Remove section and entry separators, as we're scanning all sections.
-					dec := NewDecoderWithBytes([]byte(removeTestSeparators(test.text)))
+					errp, text := makeErrPositions(test.text)
+					dec := NewDecoderWithBytes([]byte(removeTestSeparators(text)))
 					i := 0
 					for dec.Next() {
 						if i >= len(test.expect) {
@@ -458,9 +511,9 @@ func TestDecoderSkipSection(t *testing.T) {
 							// If there's an error earlier in the line, it gets returned on the
 							// later section (unless it's an out of range error, in which case it's technically valid
 							// syntax)
-							c.Assert(doSection(dec, sect), qt.ErrorMatches, regexp.QuoteMeta(e))
+							c.Assert(doSection(dec, sect), qt.ErrorMatches, regexp.QuoteMeta(errp.makeErr(e)))
 						} else {
-							sectionCheckers[sect](c, dec, test.expect[i])
+							sectionCheckers[sect](c, dec, test.expect[i], errp)
 						}
 						i++
 					}
@@ -507,7 +560,7 @@ func TestDecoderDecodeTagsOnly(t *testing.T) {
 		Value: "e",
 	}})
 	_, _, err := dec.NextField()
-	c.Assert(err, qt.ErrorMatches, `expected field key but none found`)
+	c.Assert(err, qt.ErrorMatches, `at line 1:18: expected field key but none found`)
 }
 
 var decoderTakeTests = []struct {
@@ -630,24 +683,28 @@ func TestDecoderTakeEsc(t *testing.T) {
 	for _, test := range decoderTakeTests {
 		c.Run(test.testName, func(c *qt.C) {
 			dec := test.newDecoder(`hello\ \t\\z\XY`)
-			data := dec.takeEsc(newByteSet("X").invert(), &newEscaper(" \t").revTable)
+			data, i := dec.takeEsc(newByteSet("X").invert(), &newEscaper(" \t").revTable)
 			c.Assert(string(data), qt.Equals, "hello \t\\\\z\\")
+			c.Assert(i, qt.Equals, 0)
 
 			// Check that an escaped character will be included when
 			// it's not part of the take set.
 			dec = test.newDecoder(`hello\ \t\\z\XYX`)
-			data1 := dec.takeEsc(newByteSet("X").invert(), &newEscaper("X \t").revTable)
+			data1, i := dec.takeEsc(newByteSet("X").invert(), &newEscaper("X \t").revTable)
 			c.Assert(string(data1), qt.Equals, "hello \t\\\\zXY")
+			c.Assert(i, qt.Equals, 0)
 
 			// Check that the next call to takeEsc continues where it left off.
-			data2 := dec.takeEsc(newByteSet(" ").invert(), &newEscaper(" ").revTable)
+			data2, i := dec.takeEsc(newByteSet(" ").invert(), &newEscaper(" ").revTable)
 			c.Assert(string(data2), qt.Equals, "X")
+			c.Assert(i, qt.Equals, 15)
 			// Check that data1 hasn't been overwritten.
 			c.Assert(string(data1), qt.Equals, "hello \t\\\\zXY")
 
 			// Check that a backslash followed by EOF is taken as literal.
 			dec = test.newDecoder(`x\`)
-			data = dec.takeEsc(newByteSet("").invert(), &newEscaper(" ").revTable)
+			data, i = dec.takeEsc(newByteSet("").invert(), &newEscaper(" ").revTable)
+			c.Assert(i, qt.Equals, 0)
 			c.Assert(string(data), qt.Equals, "x\\")
 		})
 	}
@@ -657,9 +714,10 @@ func TestDecoderTakeEscSkipping(t *testing.T) {
 	c := qt.New(t)
 	dec := NewDecoder(strings.NewReader(`hello\ \t\\z\XY`))
 	dec.skipping = true
-	data := dec.takeEsc(newByteSet("X").invert(), &newEscaper(" \t").revTable)
+	data, i := dec.takeEsc(newByteSet("X").invert(), &newEscaper(" \t").revTable)
 	// When skipping is true, the data isn't unquoted (that's just unnecessary extra work).
 	c.Assert(string(data), qt.Equals, `hello\ \t\\z\`)
+	c.Assert(i, qt.Equals, 0)
 }
 
 func TestDecoderTakeEscGrowBuffer(t *testing.T) {
@@ -674,8 +732,9 @@ func TestDecoderTakeEscGrowBuffer(t *testing.T) {
 			len(`  foo`),
 		},
 	})
-	data := dec.takeEsc(newByteSet(" ").invert(), &newEscaper(" ").revTable)
+	data, i := dec.takeEsc(newByteSet(" ").invert(), &newEscaper(" ").revTable)
 	c.Assert(string(data), qt.Equals, `hello    `)
+	c.Assert(i, qt.Equals, 0)
 	data = dec.take(newByteSet("").invert())
 	c.Assert(string(data), qt.Equals, ` foo`)
 }
@@ -1067,7 +1126,7 @@ func singleEntry(s string) func() ([]byte, int) {
 	}
 }
 
-func BenchmarkScanEntriesSkipping(b *testing.B) {
+func BenchmarkDecodeEntriesSkipping(b *testing.B) {
 	for _, bench := range scanEntriesBenchmarks {
 		b.Run(bench.name, func(b *testing.B) {
 			data, total := bench.makeData()
@@ -1075,7 +1134,7 @@ func BenchmarkScanEntriesSkipping(b *testing.B) {
 			// Sanity check that the decoder is doing what we're expecting.
 			// Only check the first entry because checking them all is slow.
 			dec := NewDecoderWithBytes(data)
-			assertDecodeResult(c, dec, []Point{bench.expect}, true)
+			assertDecodeResult(c, dec, []Point{bench.expect}, true, errPositions{})
 			b.ReportAllocs()
 			b.ResetTimer()
 			b.SetBytes(int64(len(data)))
@@ -1093,7 +1152,7 @@ func BenchmarkScanEntriesSkipping(b *testing.B) {
 	}
 }
 
-func BenchmarkScanEntriesWithoutSkipping(b *testing.B) {
+func BenchmarkDecodeEntriesWithoutSkipping(b *testing.B) {
 	for _, bench := range scanEntriesBenchmarks {
 		b.Run(bench.name, func(b *testing.B) {
 			data, total := bench.makeData()
@@ -1101,7 +1160,7 @@ func BenchmarkScanEntriesWithoutSkipping(b *testing.B) {
 			// Sanity check that the decoder is doing what we're expecting.
 			// Only check the first entry because checking them all is slow.
 			dec := NewDecoderWithBytes(data)
-			assertDecodeResult(c, dec, []Point{bench.expect}, true)
+			assertDecodeResult(c, dec, []Point{bench.expect}, true, errPositions{})
 			b.ReportAllocs()
 			b.ResetTimer()
 			b.SetBytes(int64(len(data)))
@@ -1133,55 +1192,114 @@ func BenchmarkScanEntriesWithoutSkipping(b *testing.B) {
 	}
 }
 
-func BenchmarkDecode(b *testing.B) {
-	var buf bytes.Buffer
-	b.ReportAllocs()
-	total := 0
-	for buf.Len() < 25*1024*1024 {
-		buf.WriteString("foo ba\\ rfle ")
-		for i := 0; i < 5000; i += 5 {
-			buf.WriteString("abcde")
-		}
-		buf.WriteByte('\n')
-		total++
+type errPos struct {
+	line   int64
+	column int
+}
+
+func (p errPos) String() string {
+	return fmt.Sprintf("%d:%d", p.line, p.column)
+}
+
+// errPositions records error positions so that we can avoid
+// mentioning them directly in test cases.
+type errPositions struct {
+	repl *strings.Replacer
+}
+
+// makeErr returns s with ∑ markers replaced with
+// their line:column equivalents.
+func (errp errPositions) makeErr(s string) string {
+	if errp.repl == nil {
+		return s
 	}
-	b.SetBytes(int64(buf.Len()))
-	esc := newEscaper(" \t")
-	whitespace := newByteSet(" \t")
-	word := newByteSet(" \t\n").invert()
-	decBytes := buf.Bytes()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		n := 0
-		dec := NewDecoderWithBytes(decBytes)
-		for {
-			dec.reset()
-			if !dec.ensure(1) {
-				break
-			}
-			dec.takeEsc(word, &esc.revTable)
-			dec.take(whitespace)
-			if !dec.ensure(1) {
-				break
-			}
-			dec.takeEsc(word, &esc.revTable)
-			dec.take(whitespace)
-			if !dec.ensure(1) {
-				break
-			}
-			dec.takeEsc(word, &esc.revTable)
-			dec.take(whitespace)
-			if !dec.ensure(1) {
-				break
-			}
-			if dec.at(0) != '\n' {
-				b.Fatalf("unexpected character %q at eol", string(rune(dec.at(0))))
-			}
-			dec.advance(1)
-			n++
+	s1 := errp.repl.Replace(s)
+	if strings.Count(s1, "∑") > 0 {
+		panic(fmt.Errorf("no value for error marker found in %q (remaining %q)", s, s1))
+	}
+	return s1
+}
+
+// makeErrPositions returns the positions of all the ∑ markers
+// in the text (ignoring section (§) and entry (¶) characters),
+// keyed by the character following the ∑.
+//
+// It also returns the text with the ∑ markers removed.
+func makeErrPositions(text string) (errPositions, string) {
+	buf := make([]byte, 0, len(text))
+	currPos := errPos{
+		line:   1,
+		column: 1,
+	}
+	var repls []string
+	for len(text) > 0 {
+		r, size := utf8.DecodeRuneInString(text)
+		switch r {
+		case '\n':
+			currPos.line++
+			currPos.column = 1
+			buf = append(buf, '\n')
+		case '∑':
+			_, size = utf8.DecodeRuneInString(text[size:])
+			repls = append(repls, text[:len("∑")+size], currPos.String())
+			text = text[len("∑"):]
+		case '§', '¶':
+			buf = append(buf, text[:size]...)
+		default:
+			buf = append(buf, text[:size]...)
+			currPos.column++
 		}
-		if n != total {
-			b.Fatalf("unexpected read count; got %v want %v", n, total)
-		}
+		text = text[size:]
+	}
+	return errPositions{
+		repl: strings.NewReplacer(repls...),
+	}, string(buf)
+}
+
+func TestErrorPositions(t *testing.T) {
+	// Although this is just testing an internal testing function,
+	// that function itself is used as the basis for other tests,
+	// so we're providing some base assurance for those.
+	tests := []struct {
+		text       string
+		err        string
+		expectErr  string
+		expectText string
+	}{{
+		text:      "",
+		err:       "",
+		expectErr: "",
+	}, {
+		text:      "∑¹",
+		err:       "at line ∑¹: something",
+		expectErr: "at line 1:1: something",
+	}, {
+		text:       "a\nbác∑¹helélo∑²blah\n∑³x\n",
+		err:        "foo: at line ∑¹: blah",
+		expectErr:  "foo: at line 2:4: blah",
+		expectText: "a\nbácheléloblah\nx\n",
+	}, {
+		text:       "a\nbác∑¹helélo∑²blah\n∑³x\n",
+		err:        "foo: at line ∑²: blah",
+		expectErr:  "foo: at line 2:10: blah",
+		expectText: "a\nbácheléloblah\nx\n",
+	}, {
+		text:       "a\nbác∑¹helélo∑²blah\n∑³x\n",
+		err:        "foo: at line ∑³: blah",
+		expectErr:  "foo: at line 3:1: blah",
+		expectText: "a\nbácheléloblah\nx\n",
+	}, {
+		text:       "§¶a¶∑¹x",
+		err:        "at line ∑¹: blah",
+		expectErr:  "at line 1:2: blah",
+		expectText: "§¶a¶x",
+	}}
+	c := qt.New(t)
+	for _, test := range tests {
+		c.Run("", func(c *qt.C) {
+			eps, text := makeErrPositions(test.text)
+			c.Assert(text, qt.Equals, test.expectText)
+			c.Assert(eps.makeErr(test.err), qt.Equals, test.expectErr)
+		})
 	}
 }
