@@ -128,7 +128,7 @@ func NewValue(x interface{}) (Value, bool) {
 	case int64:
 		return IntValue(x), true
 	case uint64:
-		return UIntValue(x), true
+		return UintValue(x), true
 	case float64:
 		return FloatValue(x)
 	case bool:
@@ -149,8 +149,8 @@ func IntValue(x int64) Value {
 	}
 }
 
-// UIntValue returns a Value containing the value of x.
-func UIntValue(x uint64) Value {
+// UintValue returns a Value containing the value of x.
+func UintValue(x uint64) Value {
 	return Value{
 		number: uint64(x),
 		bytes:  uintSentinel[:],
