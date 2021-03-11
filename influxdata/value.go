@@ -126,42 +126,87 @@ func NewValueFromBytes(kind ValueKind, data []byte) (Value, error) {
 func NewValue(x interface{}) (Value, bool) {
 	switch x := x.(type) {
 	case int64:
-		return Value{
-			number: uint64(x),
-			bytes:  intSentinel[:],
-		}, true
+		return IntValue(x), true
 	case uint64:
-		return Value{
-			number: uint64(x),
-			bytes:  uintSentinel[:],
-		}, true
+		return UIntValue(x), true
 	case float64:
-		if math.IsInf(x, 0) || math.IsNaN(x) {
-			return Value{}, false
-		}
-		return Value{
-			number: math.Float64bits(x),
-			bytes:  floatSentinel[:],
-		}, true
+		return FloatValue(x)
 	case bool:
-		n := uint64(0)
-		if x {
-			n = 1
-		}
-		return Value{
-			number: uint64(n),
-			bytes:  boolSentinel[:],
-		}, true
+		return BoolValue(x), true
 	case string:
-		return Value{
-			bytes: []byte(x),
-		}, true
+		return StringValue(x)
 	case []byte:
-		return Value{
-			bytes: append([]byte(nil), x...),
-		}, true
+		return StringValueFromBytes(x)
 	}
 	return Value{}, false
+}
+
+// IntValue returns a Value containing the value of x.
+func IntValue(x int64) Value {
+	return Value{
+		number: uint64(x),
+		bytes:  intSentinel[:],
+	}
+}
+
+// UIntValue returns a Value containing the value of x.
+func UIntValue(x uint64) Value {
+	return Value{
+		number: uint64(x),
+		bytes:  uintSentinel[:],
+	}
+}
+
+// FloatValue returns a Value containing the value of x.
+//
+// FloatValue will fail and return false if x is a +/- infinity or NaN.
+func FloatValue(x float64) (Value, bool) {
+	if math.IsInf(x, 0) || math.IsNaN(x) {
+		return Value{}, false
+	}
+	return Value{
+		number: math.Float64bits(x),
+		bytes:  floatSentinel[:],
+	}, true
+}
+
+// BoolValue returns a Value containing the value of x.
+func BoolValue(x bool) Value {
+	n := uint64(0)
+	if x {
+		n = 1
+	}
+	return Value{
+		number: uint64(n),
+		bytes:  boolSentinel[:],
+	}
+}
+
+// StringValue returns a Value containing the value of x.
+//
+// StringValue will fail and return false if x contains invalid utf-8.
+func StringValue(x string) (Value, bool) {
+	if !utf8.ValidString(x) {
+		return Value{}, false
+	}
+	return Value{
+		bytes: []byte(x),
+	}, true
+}
+
+// StringValueFromBytes returns a Value containing the value of x.
+//
+// StringValueFromBytes will fail and return false if x contains invalid utf-8.
+//
+// Unlike NewValueFromBytes, StringValueFromBytes will make a copy of the byte
+// slice - use NewValueFromBytes if you require zero-copy semantics.
+func StringValueFromBytes(x []byte) (Value, bool) {
+	if !utf8.Valid(x) {
+		return Value{}, false
+	}
+	return Value{
+		bytes: append([]byte(nil), x...),
+	}, true
 }
 
 // IntV returns the value as an int64. It panics if v.Kind is not Int.
