@@ -142,7 +142,16 @@ func NewDecoderAtSection(buf []byte, section Section) *Decoder {
 //	}
 //
 func (d *Decoder) Next() bool {
-	d.advanceToSection(endSection)
+	if _, err := d.advanceToSection(endSection); err != nil {
+		// There was a syntax error and the line might not be
+		// fully consumed, so make sure that we do actually
+		// consume the rest of the line. This relies on the fact
+		// that when we return a syntax error, we abandon the
+		// rest of the line by going to newlineSection. If we
+		// changed that behaviour (for example to allow obtaining
+		// multiple errors per line), then we might need to loop here.
+		d.advanceToSection(endSection)
+	}
 	d.skipEmptyLines()
 	d.section = MeasurementSection
 	return d.ensure(1)
@@ -482,7 +491,7 @@ func (d *Decoder) skipEmptyLines() {
 	}
 }
 
-func (d *Decoder) advanceToSection(section Section) (_ok bool, _err error) {
+func (d *Decoder) advanceToSection(section Section) (bool, error) {
 	if d.section == section {
 		return true, nil
 	}
