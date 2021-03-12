@@ -1,9 +1,11 @@
 package influxdata
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"time"
+	"unicode/utf8"
 )
 
 const (
@@ -69,6 +71,10 @@ type Decoder struct {
 	// escBuf holds a buffer for unescaped characters.
 	escBuf []byte
 
+	// line holds the line number corresponding to the
+	// character at buf[r1].
+	line int64
+
 	// err holds any non-EOF error that was returned from rd.
 	err error
 }
@@ -81,6 +87,7 @@ func NewDecoderWithBytes(buf []byte) *Decoder {
 		complete: true,
 		escBuf:   make([]byte, 0, 512),
 		section:  endSection,
+		line:     1,
 	}
 }
 
@@ -90,6 +97,7 @@ func NewDecoder(r io.Reader) *Decoder {
 		rd:      r,
 		escBuf:  make([]byte, 0, 512),
 		section: endSection,
+		line:    1,
 	}
 }
 
@@ -105,6 +113,7 @@ func NewDecoderAtSection(buf []byte, section Section) *Decoder {
 		complete: true,
 		escBuf:   make([]byte, 0, 512),
 		section:  section,
+		line:     1,
 	}
 	if section != TagSection || !whitespace.get(dec.at(0)) {
 		return dec
@@ -123,7 +132,8 @@ func NewDecoderAtSection(buf []byte, section Section) *Decoder {
 // entry available. Syntax errors on individual lines do not cause this
 // to return false (the decoder attempts to recover from badly
 // formatted lines), but I/O errors do. Call d.Err to discover if there
-// was any I/O error.
+// was any I/O error. Syntax errors are returned as *DecoderError
+// errors from Decoder methods.
 //
 // After calling Next, the various components of a line can be retrieved
 // by calling Measurement, NextTag, NextField and Time in that order
@@ -167,6 +177,8 @@ func (d *Decoder) Err() error {
 // Measurement returns the measurement name. It returns nil
 // unless called before NextTag, NextField or Time.
 func (d *Decoder) Measurement() ([]byte, error) {
+	defer func() {
+	}()
 	if ok, err := d.advanceToSection(MeasurementSection); err != nil {
 		return nil, err
 	} else if !ok {
@@ -178,18 +190,19 @@ func (d *Decoder) Measurement() ([]byte, error) {
 	// empty/comment lines too. Maybe that's a bad idea.
 	d.skipEmptyLines()
 	d.reset()
-	measure := d.takeEsc(measurementChars, &measurementEscapes.revTable)
+	measure, i0 := d.takeEsc(measurementChars, &measurementEscapes.revTable)
 	if len(measure) == 0 {
 		if !d.ensure(1) {
-			return nil, d.syntaxErrorf("no measurement name found")
+			return nil, d.syntaxErrorf(i0, "no measurement name found")
 		}
-		return nil, d.syntaxErrorf("invalid character %q found at start of measurement name", d.at(0))
+		return nil, d.syntaxErrorf(i0, "invalid character %q found at start of measurement name", d.at(0))
 	}
 	if measure[0] == '#' {
 		// Comments are usually skipped earlier but if a comment contains invalid white space,
 		// there's no way for the comment-parsing code to return an error, so instead
 		// the read point is set to the start of the comment and we hit this case.
-		return nil, d.syntaxErrorf("invalid character found in comment line")
+		// TODO find the actual invalid character to give a more accurate position.
+		return nil, d.syntaxErrorf(i0, "invalid character found in comment line")
 	}
 	if err := d.advanceTagComma(); err != nil {
 		return nil, err
@@ -213,17 +226,17 @@ func (d *Decoder) NextTag() (key, value []byte, err error) {
 		d.section = FieldSection
 		return nil, nil, nil
 	}
-	tagKey := d.takeEsc(tagKeyChars, &tagKeyEscapes.revTable)
+	tagKey, i0 := d.takeEsc(tagKeyChars, &tagKeyEscapes.revTable)
 	if len(tagKey) == 0 || !d.ensure(1) || d.at(0) != '=' {
 		if !d.ensure(1) {
-			return nil, nil, d.syntaxErrorf("empty tag name")
+			return nil, nil, d.syntaxErrorf(i0, "empty tag name")
 		}
-		return nil, nil, d.syntaxErrorf("expected '=' after tag key %q, but got %q instead", tagKey, d.at(0))
+		return nil, nil, d.syntaxErrorf(i0, "expected '=' after tag key %q, but got %q instead", tagKey, d.at(0))
 	}
 	d.advance(1)
-	tagVal := d.takeEsc(tagValChars, &tagValEscapes.revTable)
+	tagVal, i0 := d.takeEsc(tagValChars, &tagValEscapes.revTable)
 	if len(tagVal) == 0 {
-		return nil, nil, d.syntaxErrorf("expected tag value after tag key %q, but none found", tagKey)
+		return nil, nil, d.syntaxErrorf(i0, "expected tag value after tag key %q, but none found", tagKey)
 	}
 	if !d.ensure(1) {
 		// There's no more data after the tag value. Instead of returning an error
@@ -254,10 +267,10 @@ func (d *Decoder) advanceTagComma() error {
 	// of a tag name there.
 	d.advance(1)
 	if !d.ensure(1) {
-		return d.syntaxErrorf("expected tag key after comma; got end of input")
+		return d.syntaxErrorf(d.r1-d.r0, "expected tag key after comma; got end of input")
 	}
 	if whitespace.get(d.at(0)) {
-		return d.syntaxErrorf("expected tag key after comma; got white space instead")
+		return d.syntaxErrorf(d.r1-d.r0, "expected tag key after comma; got white space instead")
 	}
 	return nil
 }
@@ -270,27 +283,29 @@ func (d *Decoder) advanceTagComma() error {
 // The returned value slice may not be valid: to
 // check its validity, use NewValueFromBytes(kind, value), or use NextField.
 func (d *Decoder) NextFieldBytes() (key []byte, kind ValueKind, value []byte, err error) {
+	defer func() {
+	}()
 	if ok, err := d.advanceToSection(FieldSection); err != nil {
 		return nil, Unknown, nil, err
 	} else if !ok {
 		return nil, Unknown, nil, nil
 	}
-	fieldKey := d.takeEsc(fieldKeyChars, &fieldKeyEscapes.revTable)
+	fieldKey, i0 := d.takeEsc(fieldKeyChars, &fieldKeyEscapes.revTable)
 	if len(fieldKey) == 0 {
 		if !d.ensure(1) {
-			return nil, Unknown, nil, d.syntaxErrorf("expected field key but none found")
+			return nil, Unknown, nil, d.syntaxErrorf(i0, "expected field key but none found")
 		}
-		return nil, Unknown, nil, d.syntaxErrorf("invalid character %q found at start of field key", d.at(0))
+		return nil, Unknown, nil, d.syntaxErrorf(i0, "invalid character %q found at start of field key", d.at(0))
 	}
 	if !d.ensure(1) {
-		return nil, Unknown, nil, d.syntaxErrorf("want '=' after field key %q, found end of input", fieldKey)
+		return nil, Unknown, nil, d.syntaxErrorf(d.r1-d.r0, "want '=' after field key %q, found end of input", fieldKey)
 	}
 	if nextc := d.at(0); nextc != '=' {
-		return nil, Unknown, nil, d.syntaxErrorf("want '=' after field key %q, found %q", fieldKey, nextc)
+		return nil, Unknown, nil, d.syntaxErrorf(d.r1-d.r0, "want '=' after field key %q, found %q", fieldKey, nextc)
 	}
 	d.advance(1)
 	if !d.ensure(1) {
-		return nil, Unknown, nil, d.syntaxErrorf("expected field value, found end of input")
+		return nil, Unknown, nil, d.syntaxErrorf(d.r1-d.r0, "expected field value, found end of input")
 	}
 	var fieldVal []byte
 	var fieldKind ValueKind
@@ -298,14 +313,14 @@ func (d *Decoder) NextFieldBytes() (key []byte, kind ValueKind, value []byte, er
 	case '"':
 		// Skip leading quote.
 		d.advance(1)
-		fieldVal = d.takeEsc(fieldStringValChars, &fieldStringValEscapes.revTable)
+		fieldVal, i0 = d.takeEsc(fieldStringValChars, &fieldStringValEscapes.revTable)
 		fieldKind = String
 		if !d.ensure(1) {
-			return nil, Unknown, nil, d.syntaxErrorf("expected closing quote for string field value, found end of input")
+			return nil, Unknown, nil, d.syntaxErrorf(i0-1, "expected closing quote for string field value, found end of input")
 		}
 		if d.at(0) != '"' {
 			// This can't happen, as all characters are allowed in a string.
-			return nil, Unknown, nil, d.syntaxErrorf("unexpected string termination")
+			return nil, Unknown, nil, d.syntaxErrorf(i0-1, "unexpected string termination")
 		}
 		// Skip trailing quote
 		d.advance(1)
@@ -325,7 +340,7 @@ func (d *Decoder) NextFieldBytes() (key []byte, kind ValueKind, value []byte, er
 			fieldKind = Float
 		}
 	default:
-		return nil, Unknown, nil, d.syntaxErrorf("field value has unrecognized type")
+		return nil, Unknown, nil, d.syntaxErrorf(d.r1-d.r0, "field value has unrecognized type")
 	}
 	if !d.ensure(1) {
 		d.section = endSection
@@ -337,7 +352,7 @@ func (d *Decoder) NextFieldBytes() (key []byte, kind ValueKind, value []byte, er
 		return fieldKey, fieldKind, fieldVal, nil
 	}
 	if !whitespace.get(nextc) {
-		return nil, Unknown, nil, d.syntaxErrorf("unexpected character %q after field", nextc)
+		return nil, Unknown, nil, d.syntaxErrorf(d.r1-d.r0, "unexpected character %q after field", nextc)
 	}
 	d.take(fieldSeparatorSpace)
 	if d.takeEOL() {
@@ -358,6 +373,7 @@ func (d *Decoder) takeEOL() bool {
 	case '\n':
 		// Regular NL.
 		d.advance(1)
+		d.line++
 		return true
 	case '\r':
 		if !d.ensure(2) {
@@ -368,6 +384,7 @@ func (d *Decoder) takeEOL() bool {
 		if d.at(1) == '\n' {
 			// CR-NL
 			d.advance(2)
+			d.line++
 			return true
 		}
 	}
@@ -383,13 +400,29 @@ func (d *Decoder) takeEOL() bool {
 // (as opposed to being syntactically invalid),
 // the errors.Is(err, ErrValueOutOfRange) will return true.
 func (d *Decoder) NextField() (key []byte, val Value, err error) {
+	// Even though NextFieldBytes calls advanceToSection,
+	// we need to call it here too so that we know exactly where
+	// the field starts so that startIndex is accurate.
+	if ok, err := d.advanceToSection(FieldSection); err != nil {
+		return nil, Value{}, err
+	} else if !ok {
+		return nil, Value{}, nil
+	}
+	startIndex := d.r1 - d.r0
 	key, kind, data, err := d.NextFieldBytes()
 	if err != nil || key == nil {
 		return nil, Value{}, err
 	}
+
 	v, err := NewValueFromBytes(kind, data)
 	if err != nil {
-		return nil, Value{}, fmt.Errorf("cannot parse value for field key %q: %w", key, err)
+		// We want to produce an error that points to where the field
+		// location, but NextFieldBytes has read past that.
+		// However, we know the key length, and we can work out
+		// the how many characters it took when escaped, so
+		// we can reconstruct the index of the start of the field.
+		startIndex += tagKeyEscapes.escapedLen(unsafeBytesToString(key)) + len("=")
+		return nil, Value{}, d.syntaxErrorf(startIndex, "cannot parse value for field key %q: %w", key, err)
 	}
 	return key, v, nil
 }
@@ -415,7 +448,7 @@ func (d *Decoder) TimeBytes() ([]byte, error) {
 	if !whitespace.get(d.at(0)) {
 		// Absorb the rest of the line so that we get a better error.
 		d.take(notEOL)
-		return nil, d.syntaxErrorf("invalid timestamp (%q)", d.buf[d.r0+start:d.r1])
+		return nil, d.syntaxErrorf(start, "invalid timestamp (%q)", d.buf[d.r0+start:d.r1])
 	}
 	d.take(fieldSeparatorSpace)
 	if !d.ensure(1) {
@@ -423,8 +456,9 @@ func (d *Decoder) TimeBytes() ([]byte, error) {
 		return timeBytes, nil
 	}
 	if !d.takeEOL() {
+		start := d.r1 - d.r0
 		extra := d.take(notEOL)
-		return nil, d.syntaxErrorf("unexpected text after timestamp (%q)", extra)
+		return nil, d.syntaxErrorf(start, "unexpected text after timestamp (%q)", extra)
 	}
 	d.section = endSection
 	return timeBytes, nil
@@ -457,6 +491,7 @@ func (d *Decoder) consumeLine() {
 	d.take(notNewline)
 	if d.at(0) == '\n' {
 		d.advance(1)
+		d.line++
 	}
 	d.reset()
 	d.section = endSection
@@ -478,6 +513,7 @@ func (d *Decoder) skipEmptyLines() {
 				return
 			}
 		case '\n':
+			d.line++
 			d.advance(1)
 		case '\r':
 			if !d.takeEOL() {
@@ -564,6 +600,11 @@ func (d *Decoder) consumeSection() error {
 
 // take returns the next slice of bytes that are in the given set
 // reading more data as needed. It updates d.r1.
+//
+// Note: we assume that the set never contains the newline
+// character because newlines can only occur when explicitly
+// allowed (in string field values and at the end of an entry),
+// so we don't need to update d.line.
 func (d *Decoder) take(set *byteSet) []byte {
 	// Note: use a relative index for start because absolute
 	// indexes aren't stable (the contents of the buffer can be
@@ -590,14 +631,18 @@ outer:
 // part of the set. The escapeTable determines which characters
 // can be escaped.
 // It returns the unescaped string (unless d.skipping is true, in which
-// case it doesn't need to go to the trouble of unescaping it).
-func (d *Decoder) takeEsc(set *byteSet, escapeTable *[256]byte) []byte {
+// case it doesn't need to go to the trouble of unescaping it), and the
+// index into buf that corresponds to the start of the taken bytes.
+//
+// takeEsc also returns the offset of the start of the escaped bytes
+// relative to d.r0.
+func (d *Decoder) takeEsc(set *byteSet, escapeTable *[256]byte) ([]byte, int) {
 	// start holds the offset from r0 of the start of the taken slice.
 	// Note that we can't use d.r1 directly, because the offsets can change
 	// when the buffer is grown.
 	start := d.r1 - d.r0
 
-	// startUnesc holds the offset from r0 of the start of the most recent
+	// startUnesc holds the offset from t0 of the start of the most recent
 	// unescaped segment.
 	startUnesc := start
 
@@ -650,14 +695,20 @@ outer:
 		// the loop, trying to acquire more.
 		d.r1 += len(buf)
 	}
+	taken := d.buf[d.r0+start : d.r1]
+	if set.get('\n') {
+		d.line += int64(bytes.Count(taken, newlineBytes))
+	}
 	if len(d.escBuf) > startEsc {
 		// We've got an unescaped result: append any remaining unescaped bytes
 		// and return the relevant portion of the escape buffer.
 		d.escBuf = append(d.escBuf, d.buf[startUnesc+d.r0:d.r1]...)
-		return d.escBuf[startEsc:]
+		return d.escBuf[startEsc:], start
 	}
-	return d.buf[d.r0+start : d.r1]
+	return taken, start
 }
+
+var newlineBytes = []byte{'\n'}
 
 // at returns the byte at i bytes after the current read position.
 // It assumes that the index has already been ensured.
@@ -758,11 +809,52 @@ func (d *Decoder) readMore() {
 	}
 }
 
-func (d *Decoder) syntaxErrorf(f string, a ...interface{}) error {
-	// TODO make this return an error that points to the point of failure.
+// syntaxErrorf records a syntax error at the given offset from d.r0
+// and the using the given fmt.Sprintf-formatted message.
+func (d *Decoder) syntaxErrorf(offset int, f string, a ...interface{}) error {
+	// Note: we only ever reset the buffer at the end of an entry,
+	// so we can assume that that d.r0 corresponds to column 1.
+	buf := d.buf[d.r0 : d.r0+offset]
+	var columnBytes []byte
+	if i := bytes.LastIndexByte(buf, '\n'); i >= 0 {
+		columnBytes = buf[i+1:]
+	} else {
+		columnBytes = buf
+	}
+	column := 1 + utf8.RuneCount(columnBytes)
+
+	// Note: line corresponds to the current line at d.r1, so if
+	// there are any newlines after the location of the error, we need to
+	// reduce the line we report accordingly.
+	remain := d.buf[d.r0+offset : d.r1]
+	line := d.line - int64(bytes.Count(remain, newlineBytes))
 
 	// We'll recover from a syntax error by reading all bytes until
 	// the next newline.
 	d.section = newlineSection
-	return fmt.Errorf(f, a...)
+	return &DecodeError{
+		Line:   line,
+		Column: column,
+		Err:    fmt.Errorf(f, a...),
+	}
+}
+
+// DecodeError represents an error when decoding a line-protocol entry.
+type DecodeError struct {
+	// Line holds the one-based index of the line where the error occurred.
+	Line int64
+	// Column holds the one-based index of the column where the error occurred.
+	Column int
+	// Err holds the underlying error.
+	Err error
+}
+
+func (e *DecodeError) Error() string {
+	return fmt.Sprintf("at line %d:%d: %s", e.Line, e.Column, e.Err.Error())
+}
+
+// Unwrap implements error unwrapping so that the underlying
+// error can be retrieved.
+func (e *DecodeError) Unwrap() error {
+	return e.Err
 }

@@ -35,7 +35,7 @@ func TestEncoderWithDecoderTests(t *testing.T) {
 				c.Logf("encoded: %q", data)
 				// Check that the data round-trips OK
 				dec := NewDecoderWithBytes(data)
-				assertDecodeResult(c, dec, points, false)
+				assertDecodeResult(c, dec, points, false, errPositions{})
 			})
 		}
 	}
