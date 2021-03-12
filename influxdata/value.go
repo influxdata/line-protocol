@@ -159,7 +159,7 @@ func UintValue(x uint64) Value {
 
 // FloatValue returns a Value containing the value of x.
 //
-// FloatValue will fail and return false if x is a +/- infinity or NaN.
+// FloatValue will fail and return false if x is non-finite.
 func FloatValue(x float64) (Value, bool) {
 	if math.IsInf(x, 0) || math.IsNaN(x) {
 		return Value{}, false
