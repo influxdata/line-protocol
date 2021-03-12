@@ -304,6 +304,22 @@ next§ §x=1§`,
 			Error: `cannot parse value for field key "f": line-protocol value out of range`,
 		}},
 	}},
+}, {
+	testName: "field-key-error-after-newline-in-string",
+	// Note: we've deliberately got two fields below so that
+	// if we ever change error behaviour so that the caller
+	// can see multiple errors on a single line, this test should
+	// fail (see comment in the Next method).
+	text: "m§ §f=1,\x01=1,\x01=2§",
+	expect: []Point{{
+		Measurement: "m",
+		Fields: []FieldKeyValue{{
+			Key:   "f",
+			Value: 1.0,
+		}, {
+			Error: `invalid character '\x01' found at start of field key`,
+		}},
+	}},
 }}
 
 func TestDecoder(t *testing.T) {
