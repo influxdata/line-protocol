@@ -100,6 +100,16 @@ func TestEncoderEndLineWithNoField(t *testing.T) {
 	c.Assert(e.Err(), qt.ErrorMatches, `timestamp must be added after adding at least one field`)
 }
 
+func TestEncoderEndLineWithNoTime(t *testing.T) {
+	c := qt.New(t)
+	var e Encoder
+	e.StartLine("m")
+	e.AddField("f", MustNewValue(int64(3)))
+	e.EndLine(time.Time{})
+	c.Assert(e.Err(), qt.IsNil)
+	c.Assert(string(e.Bytes()), qt.Equals, "m f=3i\n")
+}
+
 func TestEncoderAddTagBeforeStartLine(t *testing.T) {
 	c := qt.New(t)
 	var e Encoder
@@ -148,14 +158,14 @@ func TestEncoderWithPrecision(t *testing.T) {
 	e.SetPrecision(Second)
 	e.AddField("f", MustNewValue(int64(1)))
 	e.EndLine(time.Unix(0, 1615196563_299_053_942))
-	c.Assert(string(e.Bytes()), qt.Equals, `x f=1i 1615196563`)
+	c.Assert(string(e.Bytes()), qt.Equals, "x f=1i 1615196563\n")
 
 	e.Reset()
 	e.SetPrecision(Microsecond)
 	e.StartLine("x")
 	e.AddField("f", MustNewValue(int64(1)))
 	e.EndLine(time.Unix(0, 1615196563_299_053_942))
-	c.Assert(string(e.Bytes()), qt.Equals, `x f=1i 1615196563299053`)
+	c.Assert(string(e.Bytes()), qt.Equals, "x f=1i 1615196563299053\n")
 }
 
 var encoderDataErrorTests = []struct {
@@ -294,6 +304,7 @@ func TestEncoderDataError(t *testing.T) {
 			var e Encoder
 			e.StartLine("m")
 			e.AddField("f", MustNewValue(int64(1)))
+			e.EndLine(time.Time{})
 			c.Assert(e.Err(), qt.IsNil)
 			initialBytes := string(e.Bytes())
 			encodePoint(&e, test.point)
