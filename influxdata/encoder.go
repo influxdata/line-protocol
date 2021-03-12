@@ -125,8 +125,8 @@ func (e *Encoder) StartLine(measurement string) {
 			return
 		}
 	}
-	if section != MeasurementSection {
-		// This isn't the first line, so add a newline separator.
+	if section != MeasurementSection && len(e.buf) > 0 && e.buf[len(e.buf)-1] != '\n' {
+		// This isn't the first line, so add a newline separator, if needed.
 		e.buf = append(e.buf, '\n')
 	}
 	e.buf = measurementEscapes.appendEscaped(e.buf, measurement)
@@ -227,7 +227,7 @@ var (
 	maxTime = time.Unix(0, math.MaxInt64)
 )
 
-// EndLine adds the timestamp at the end of the line.
+// EndLine adds the timestamp and newline at the end of the line.
 // If t is zero, no timestamp will written and this method will do nothing.
 // If the time is outside the maximum representable time range,
 // an ErrRange error will be returned.
@@ -238,6 +238,9 @@ func (e *Encoder) EndLine(t time.Time) {
 	}
 	e.section = endSection
 	if t.IsZero() {
+		if e.lineStart == 0 { // && e.buf[e.lineStart-1] != '\n' {
+			e.buf = append(e.buf, '\n')
+		}
 		return
 	}
 	if t.Before(minTime) || t.After(maxTime) {
@@ -253,6 +256,7 @@ func (e *Encoder) EndLine(t time.Time) {
 		timestamp /= m
 	}
 	e.buf = strconv.AppendInt(e.buf, timestamp, 10)
+	e.buf = append(e.buf, '\n')
 }
 
 func (e *Encoder) setErrorf(format string, arg ...interface{}) {

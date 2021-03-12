@@ -192,7 +192,7 @@ func encodeWithCorpusInput(m *corpusMetric, precision Precision) ([]byte, error)
 		e.AddFieldRaw(field.Key, v)
 	}
 	e.EndLine(time.Unix(0, m.Time))
-	return e.Bytes(), e.Err()
+	return bytes.TrimRight(e.Bytes(), "\n"), e.Err()
 }
 
 func hasBackslashVIssue(s []byte) bool {
