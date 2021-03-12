@@ -125,8 +125,9 @@ func (e *Encoder) StartLine(measurement string) {
 			return
 		}
 	}
-	if section != MeasurementSection && len(e.buf) > 0 && e.buf[len(e.buf)-1] != '\n' {
-		// This isn't the first line, so add a newline separator, if needed.
+	if section != MeasurementSection && section != endSection {
+		// This isn't the first line, and EndLine hasn't been explicitly called,
+		// so we need a newline separator.
 		e.buf = append(e.buf, '\n')
 	}
 	e.buf = measurementEscapes.appendEscaped(e.buf, measurement)
@@ -238,7 +239,8 @@ func (e *Encoder) EndLine(t time.Time) {
 	}
 	e.section = endSection
 	if t.IsZero() {
-		if e.lineStart == 0 { // && e.buf[e.lineStart-1] != '\n' {
+		// Zero timestamp. All we need is a newline.
+		if !e.lineHasError {
 			e.buf = append(e.buf, '\n')
 		}
 		return
