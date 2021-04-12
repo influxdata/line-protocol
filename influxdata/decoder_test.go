@@ -1247,7 +1247,7 @@ func makeErrPositions(text string) (errPositions, string) {
 			buf = append(buf, text[:size]...)
 		default:
 			buf = append(buf, text[:size]...)
-			currPos.column++
+			currPos.column += size
 		}
 		text = text[size:]
 	}
@@ -1276,12 +1276,12 @@ func TestErrorPositions(t *testing.T) {
 	}, {
 		text:       "a\nbác∑¹helélo∑²blah\n∑³x\n",
 		err:        "foo: at line ∑¹: blah",
-		expectErr:  "foo: at line 2:4: blah",
+		expectErr:  "foo: at line 2:5: blah",
 		expectText: "a\nbácheléloblah\nx\n",
 	}, {
 		text:       "a\nbác∑¹helélo∑²blah\n∑³x\n",
 		err:        "foo: at line ∑²: blah",
-		expectErr:  "foo: at line 2:10: blah",
+		expectErr:  "foo: at line 2:12: blah",
 		expectText: "a\nbácheléloblah\nx\n",
 	}, {
 		text:       "a\nbác∑¹helélo∑²blah\n∑³x\n",
