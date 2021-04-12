@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"time"
-	"unicode/utf8"
 )
 
 const (
@@ -821,7 +820,7 @@ func (d *Decoder) syntaxErrorf(offset int, f string, a ...interface{}) error {
 	} else {
 		columnBytes = buf
 	}
-	column := 1 + utf8.RuneCount(columnBytes)
+	column := len(columnBytes) + 1
 
 	// Note: line corresponds to the current line at d.r1, so if
 	// there are any newlines after the location of the error, we need to
@@ -843,7 +842,7 @@ func (d *Decoder) syntaxErrorf(offset int, f string, a ...interface{}) error {
 type DecodeError struct {
 	// Line holds the one-based index of the line where the error occurred.
 	Line int64
-	// Column holds the one-based index of the column where the error occurred.
+	// Column holds the one-based index of the column (in bytes) where the error occurred.
 	Column int
 	// Err holds the underlying error.
 	Err error
