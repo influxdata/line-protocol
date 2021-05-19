@@ -683,19 +683,22 @@ func TestDecoderTakeEsc(t *testing.T) {
 	for _, test := range decoderTakeTests {
 		c.Run(test.testName, func(c *qt.C) {
 			dec := test.newDecoder(`hello\ \t\\z\XY`)
-			data, i := dec.takeEsc(newByteSet("X").invert(), &newEscaper(" \t").revTable)
+			data, i, err := dec.takeEsc(newByteSet("X").invert(), &newEscaper(" \t").revTable)
+			c.Assert(err, qt.IsNil)
 			c.Assert(string(data), qt.Equals, "hello \t\\\\z\\")
 			c.Assert(i, qt.Equals, 0)
 
 			// Check that an escaped character will be included when
 			// it's not part of the take set.
 			dec = test.newDecoder(`hello\ \t\\z\XYX`)
-			data1, i := dec.takeEsc(newByteSet("X").invert(), &newEscaper("X \t").revTable)
+			data1, i, err := dec.takeEsc(newByteSet("X").invert(), &newEscaper("X \t").revTable)
+			c.Assert(err, qt.IsNil)
 			c.Assert(string(data1), qt.Equals, "hello \t\\\\zXY")
 			c.Assert(i, qt.Equals, 0)
 
 			// Check that the next call to takeEsc continues where it left off.
-			data2, i := dec.takeEsc(newByteSet(" ").invert(), &newEscaper(" ").revTable)
+			data2, i, err := dec.takeEsc(newByteSet(" ").invert(), &newEscaper(" ").revTable)
+			c.Assert(err, qt.IsNil)
 			c.Assert(string(data2), qt.Equals, "X")
 			c.Assert(i, qt.Equals, 15)
 			// Check that data1 hasn't been overwritten.
@@ -703,7 +706,8 @@ func TestDecoderTakeEsc(t *testing.T) {
 
 			// Check that a backslash followed by EOF is taken as literal.
 			dec = test.newDecoder(`x\`)
-			data, i = dec.takeEsc(newByteSet("").invert(), &newEscaper(" ").revTable)
+			data, i, err = dec.takeEsc(newByteSet("").invert(), &newEscaper(" ").revTable)
+			c.Assert(err, qt.IsNil)
 			c.Assert(i, qt.Equals, 0)
 			c.Assert(string(data), qt.Equals, "x\\")
 		})
@@ -714,7 +718,8 @@ func TestDecoderTakeEscSkipping(t *testing.T) {
 	c := qt.New(t)
 	dec := NewDecoder(strings.NewReader(`hello\ \t\\z\XY`))
 	dec.skipping = true
-	data, i := dec.takeEsc(newByteSet("X").invert(), &newEscaper(" \t").revTable)
+	data, i, err := dec.takeEsc(newByteSet("X").invert(), &newEscaper(" \t").revTable)
+	c.Assert(err, qt.IsNil)
 	// When skipping is true, the data isn't unquoted (that's just unnecessary extra work).
 	c.Assert(string(data), qt.Equals, `hello\ \t\\z\`)
 	c.Assert(i, qt.Equals, 0)
@@ -732,7 +737,8 @@ func TestDecoderTakeEscGrowBuffer(t *testing.T) {
 			len(`  foo`),
 		},
 	})
-	data, i := dec.takeEsc(newByteSet(" ").invert(), &newEscaper(" ").revTable)
+	data, i, err := dec.takeEsc(newByteSet(" ").invert(), &newEscaper(" ").revTable)
+	c.Assert(err, qt.IsNil)
 	c.Assert(string(data), qt.Equals, `hello    `)
 	c.Assert(i, qt.Equals, 0)
 	data = dec.take(newByteSet("").invert())

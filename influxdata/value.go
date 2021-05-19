@@ -42,7 +42,15 @@ func MustNewValue(x interface{}) Value {
 
 // Equal reports whether v1 is equal to v2.
 func (v1 Value) Equal(v2 Value) bool {
-	return v1.Kind() == v2.Kind() && v1.number == v2.number && bytes.Equal(v1.bytes, v2.bytes)
+	k := v1.Kind()
+	if v2.Kind() != k {
+		return false
+	}
+	if k != Float {
+		return v1.number == v2.number && bytes.Equal(v1.bytes, v2.bytes)
+	}
+	// Floats can't be compared bitwise.
+	return v1.FloatV() == v2.FloatV()
 }
 
 // NewValueFromBytes creates a value of the given kind with the
@@ -58,6 +66,10 @@ func (v1 Value) Equal(v2 Value) bool {
 // should be unescaped already and should not contain invalid
 // utf-8. The returned value will contain a reference to data - it does not make a copy.
 func NewValueFromBytes(kind ValueKind, data []byte) (Value, error) {
+	return newValueFromBytes(kind, data, true)
+}
+
+func newValueFromBytes(kind ValueKind, data []byte, checkUTF8 bool) (Value, error) {
 	switch kind {
 	case Int:
 		x, err := parseIntBytes(data, 10, 64)
@@ -99,7 +111,7 @@ func NewValueFromBytes(kind ValueKind, data []byte) (Value, error) {
 			bytes:  boolSentinel[:],
 		}, nil
 	case String:
-		if !utf8.Valid(data) {
+		if checkUTF8 && !utf8.Valid(data) {
 			return Value{}, fmt.Errorf("invalid utf-8 found in value %q", data)
 		}
 		return Value{
