@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"time"
+	"unicode/utf8"
 )
 
 const (
@@ -189,7 +190,10 @@ func (d *Decoder) Measurement() ([]byte, error) {
 	// empty/comment lines too. Maybe that's a bad idea.
 	d.skipEmptyLines()
 	d.reset()
-	measure, i0 := d.takeEsc(measurementChars, &measurementEscapes.revTable)
+	measure, i0, err := d.takeEsc(measurementChars, &measurementEscapes.revTable)
+	if err != nil {
+		return nil, err
+	}
 	if len(measure) == 0 {
 		if !d.ensure(1) {
 			return nil, d.syntaxErrorf(i0, "no measurement name found")
@@ -225,7 +229,10 @@ func (d *Decoder) NextTag() (key, value []byte, err error) {
 		d.section = FieldSection
 		return nil, nil, nil
 	}
-	tagKey, i0 := d.takeEsc(tagKeyChars, &tagKeyEscapes.revTable)
+	tagKey, i0, err := d.takeEsc(tagKeyChars, &tagKeyEscapes.revTable)
+	if err != nil {
+		return nil, nil, err
+	}
 	if len(tagKey) == 0 || !d.ensure(1) || d.at(0) != '=' {
 		if !d.ensure(1) {
 			return nil, nil, d.syntaxErrorf(i0, "empty tag name")
@@ -233,7 +240,10 @@ func (d *Decoder) NextTag() (key, value []byte, err error) {
 		return nil, nil, d.syntaxErrorf(i0, "expected '=' after tag key %q, but got %q instead", tagKey, d.at(0))
 	}
 	d.advance(1)
-	tagVal, i0 := d.takeEsc(tagValChars, &tagValEscapes.revTable)
+	tagVal, i0, err := d.takeEsc(tagValChars, &tagValEscapes.revTable)
+	if err != nil {
+		return nil, nil, err
+	}
 	if len(tagVal) == 0 {
 		return nil, nil, d.syntaxErrorf(i0, "expected tag value after tag key %q, but none found", tagKey)
 	}
@@ -289,7 +299,10 @@ func (d *Decoder) NextFieldBytes() (key []byte, kind ValueKind, value []byte, er
 	} else if !ok {
 		return nil, Unknown, nil, nil
 	}
-	fieldKey, i0 := d.takeEsc(fieldKeyChars, &fieldKeyEscapes.revTable)
+	fieldKey, i0, err := d.takeEsc(fieldKeyChars, &fieldKeyEscapes.revTable)
+	if err != nil {
+		return nil, Unknown, nil, err
+	}
 	if len(fieldKey) == 0 {
 		if !d.ensure(1) {
 			return nil, Unknown, nil, d.syntaxErrorf(i0, "expected field key but none found")
@@ -312,7 +325,11 @@ func (d *Decoder) NextFieldBytes() (key []byte, kind ValueKind, value []byte, er
 	case '"':
 		// Skip leading quote.
 		d.advance(1)
-		fieldVal, i0 = d.takeEsc(fieldStringValChars, &fieldStringValEscapes.revTable)
+		var err error
+		fieldVal, i0, err = d.takeEsc(fieldStringValChars, &fieldStringValEscapes.revTable)
+		if err != nil {
+			return nil, Unknown, nil, err
+		}
 		fieldKind = String
 		if !d.ensure(1) {
 			return nil, Unknown, nil, d.syntaxErrorf(i0-1, "expected closing quote for string field value, found end of input")
@@ -413,7 +430,7 @@ func (d *Decoder) NextField() (key []byte, val Value, err error) {
 		return nil, Value{}, err
 	}
 
-	v, err := NewValueFromBytes(kind, data)
+	v, err := newValueFromBytes(kind, data, false)
 	if err != nil {
 		// We want to produce an error that points to where the field
 		// location, but NextFieldBytes has read past that.
@@ -629,13 +646,17 @@ outer:
 // takeEsc is like take except that escaped characters also count as
 // part of the set. The escapeTable determines which characters
 // can be escaped.
+//
 // It returns the unescaped string (unless d.skipping is true, in which
 // case it doesn't need to go to the trouble of unescaping it), and the
 // index into buf that corresponds to the start of the taken bytes.
 //
 // takeEsc also returns the offset of the start of the escaped bytes
 // relative to d.r0.
-func (d *Decoder) takeEsc(set *byteSet, escapeTable *[256]byte) ([]byte, int) {
+//
+// It returns an error if the returned string contains an
+// invalid UTF-8 sequence. The other return parameters are unaffected by this.
+func (d *Decoder) takeEsc(set *byteSet, escapeTable *[256]byte) ([]byte, int, error) {
 	// start holds the offset from r0 of the start of the taken slice.
 	// Note that we can't use d.r1 directly, because the offsets can change
 	// when the buffer is grown.
@@ -702,9 +723,13 @@ outer:
 		// We've got an unescaped result: append any remaining unescaped bytes
 		// and return the relevant portion of the escape buffer.
 		d.escBuf = append(d.escBuf, d.buf[startUnesc+d.r0:d.r1]...)
-		return d.escBuf[startEsc:], start
+		taken = d.escBuf[startEsc:]
 	}
-	return taken, start
+	if !utf8.Valid(taken) {
+		// TODO point directly to the offending sequence.
+		return taken, start, d.syntaxErrorf(start, "invalid utf-8 sequence in token %q", taken)
+	}
+	return taken, start, nil
 }
 
 var newlineBytes = []byte{'\n'}

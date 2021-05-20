@@ -166,3 +166,59 @@ func TestNewValueInvalid(t *testing.T) {
 		})
 	}
 }
+
+var valueEqualTests = []struct {
+	testName string
+	v1, v2   Value
+	expect   bool
+}{{
+	testName: "SameString",
+	v1:       MustNewValue("hello"),
+	v2:       MustNewValue("hello"),
+	expect:   true,
+}, {
+	testName: "SameInt",
+	v1:       MustNewValue(int64(12345)),
+	v2:       MustNewValue(int64(12345)),
+	expect:   true,
+}, {
+	testName: "SameBool",
+	v1:       MustNewValue(true),
+	v2:       MustNewValue(true),
+	expect:   true,
+}, {
+	testName: "SameFloat",
+	v1:       MustNewValue(1234.5),
+	v2:       MustNewValue(1234.5),
+	expect:   true,
+}, {
+	testName: "SameUint",
+	v1:       MustNewValue(uint64(43323)),
+	v2:       MustNewValue(uint64(43323)),
+	expect:   true,
+}, {
+	testName: "DifferentFloat",
+	v1:       MustNewValue(0.1),
+	v2:       MustNewValue(0.2),
+	expect:   false,
+}, {
+	testName: "DifferentTypesSameBits",
+	v1:       MustNewValue("i"),
+	v2:       MustNewValue(int64(0)),
+}, {
+	testName: "DifferentZeros",
+	v1:       MustNewValue(zero),
+	v2:       MustNewValue(-zero),
+	expect:   true,
+}}
+
+var zero = 0.0
+
+func TestValueEqual(t *testing.T) {
+	c := qt.New(t)
+	for _, test := range valueEqualTests {
+		c.Run(test.testName, func(c *qt.C) {
+			c.Assert(test.v1.Equal(test.v2), qt.Equals, test.expect)
+		})
+	}
+}
