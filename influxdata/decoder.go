@@ -19,13 +19,13 @@ const (
 var (
 	fieldSeparatorSpace   = newByteSet(" ")
 	whitespace            = fieldSeparatorSpace.union(newByteSet("\r\n"))
-	tagKeyChars           = newByteSet(",= ").union(nonPrintable).invert()
-	tagKeyEscapes         = newEscaper(",= ")
 	nonPrintable          = newByteSetRange(0, 31).union(newByteSet("\x7f"))
 	eolChars              = newByteSet("\r\n")
 	measurementChars      = newByteSet(", ").union(nonPrintable).invert()
 	measurementEscapes    = newEscaper(" ,")
-	tagValChars           = newByteSet(",=").union(whitespace).invert()
+	tagKeyChars           = newByteSet(",= ").union(nonPrintable).invert()
+	tagKeyEscapes         = newEscaper(",= ")
+	tagValChars           = newByteSet(",=").union(whitespace).union(nonPrintable).invert()
 	tagValEscapes         = newEscaper(", =")
 	fieldKeyChars         = tagKeyChars
 	fieldKeyEscapes       = tagKeyEscapes
@@ -36,6 +36,11 @@ var (
 	commentChars          = nonPrintable.invert().without(eolChars)
 	notEOL                = eolChars.invert()
 	notNewline            = newByteSet("\n").invert()
+
+	legacyMeasurementChars = newByteSet(", ").invert()
+	legacyTagKeyChars      = newByteSet(",= ").invert()
+	legacyTagValChars      = newByteSet(",=").union(whitespace).invert()
+	legacyFieldKeyChars    = legacyTagKeyChars
 )
 
 // Decoder implements low level parsing of a set of line-protocol entries.
@@ -60,13 +65,16 @@ type Decoder struct {
 	// is known to be all the data that's available.
 	complete bool
 
-	// section holds the current section of the entry that's being
-	// read.
-	section Section
-
 	// skipping holds whether we will need
 	// to return the values that we're decoding.
 	skipping bool
+
+	// legacy holds whether SetLegacy has been called.
+	legacy bool
+
+	// section holds the current section of the entry that's being
+	// read.
+	section Section
 
 	// escBuf holds a buffer for unescaped characters.
 	escBuf []byte
@@ -77,6 +85,12 @@ type Decoder struct {
 
 	// err holds any non-EOF error that was returned from rd.
 	err error
+
+	// Syntactical elements that are affected by SetLegacy.
+	measurementChars *byteSet
+	tagKeyChars      *byteSet
+	tagValChars      *byteSet
+	fieldKeyChars    *byteSet
 }
 
 // NewDecoder returns a decoder that splits the line-protocol text
@@ -88,6 +102,11 @@ func NewDecoderWithBytes(buf []byte) *Decoder {
 		escBuf:   make([]byte, 0, 512),
 		section:  endSection,
 		line:     1,
+
+		measurementChars: measurementChars,
+		tagKeyChars:      tagKeyChars,
+		tagValChars:      tagValChars,
+		fieldKeyChars:    fieldKeyChars,
 	}
 }
 
@@ -98,6 +117,11 @@ func NewDecoder(r io.Reader) *Decoder {
 		escBuf:  make([]byte, 0, 512),
 		section: endSection,
 		line:    1,
+
+		measurementChars: measurementChars,
+		tagKeyChars:      tagKeyChars,
+		tagValChars:      tagValChars,
+		fieldKeyChars:    fieldKeyChars,
 	}
 }
 
@@ -114,6 +138,11 @@ func NewDecoderAtSection(buf []byte, section Section) *Decoder {
 		escBuf:   make([]byte, 0, 512),
 		section:  section,
 		line:     1,
+
+		measurementChars: measurementChars,
+		tagKeyChars:      tagKeyChars,
+		tagValChars:      tagValChars,
+		fieldKeyChars:    fieldKeyChars,
 	}
 	if section != TagSection || !whitespace.get(dec.at(0)) {
 		return dec
@@ -126,6 +155,19 @@ func NewDecoderAtSection(buf []byte, section Section) *Decoder {
 	dec.take(fieldSeparatorSpace)
 	dec.section = FieldSection
 	return dec
+}
+
+// SetLegacy causes the decoder to decode using some legacy semantics.
+// Specifically:
+//
+// - invalid utf-8 sequences are allowed
+// - non-printable characters are allowed
+func (dec *Decoder) SetLegacy() {
+	dec.measurementChars = legacyMeasurementChars
+	dec.tagKeyChars = legacyTagKeyChars
+	dec.tagValChars = legacyTagValChars
+	dec.fieldKeyChars = legacyFieldKeyChars
+	dec.legacy = true
 }
 
 // Next advances to the next entry, and reports whether there is an
@@ -177,8 +219,6 @@ func (d *Decoder) Err() error {
 // Measurement returns the measurement name. It returns nil
 // unless called before NextTag, NextField or Time.
 func (d *Decoder) Measurement() ([]byte, error) {
-	defer func() {
-	}()
 	if ok, err := d.advanceToSection(MeasurementSection); err != nil {
 		return nil, err
 	} else if !ok {
@@ -190,7 +230,7 @@ func (d *Decoder) Measurement() ([]byte, error) {
 	// empty/comment lines too. Maybe that's a bad idea.
 	d.skipEmptyLines()
 	d.reset()
-	measure, i0, err := d.takeEsc(measurementChars, &measurementEscapes.revTable)
+	measure, i0, err := d.takeEsc(d.measurementChars, &measurementEscapes.revTable)
 	if err != nil {
 		return nil, err
 	}
@@ -229,7 +269,7 @@ func (d *Decoder) NextTag() (key, value []byte, err error) {
 		d.section = FieldSection
 		return nil, nil, nil
 	}
-	tagKey, i0, err := d.takeEsc(tagKeyChars, &tagKeyEscapes.revTable)
+	tagKey, i0, err := d.takeEsc(d.tagKeyChars, &tagKeyEscapes.revTable)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -240,7 +280,7 @@ func (d *Decoder) NextTag() (key, value []byte, err error) {
 		return nil, nil, d.syntaxErrorf(i0, "expected '=' after tag key %q, but got %q instead", tagKey, d.at(0))
 	}
 	d.advance(1)
-	tagVal, i0, err := d.takeEsc(tagValChars, &tagValEscapes.revTable)
+	tagVal, i0, err := d.takeEsc(d.tagValChars, &tagValEscapes.revTable)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -299,7 +339,7 @@ func (d *Decoder) NextFieldBytes() (key []byte, kind ValueKind, value []byte, er
 	} else if !ok {
 		return nil, Unknown, nil, nil
 	}
-	fieldKey, i0, err := d.takeEsc(fieldKeyChars, &fieldKeyEscapes.revTable)
+	fieldKey, i0, err := d.takeEsc(d.fieldKeyChars, &fieldKeyEscapes.revTable)
 	if err != nil {
 		return nil, Unknown, nil, err
 	}
@@ -725,7 +765,7 @@ outer:
 		d.escBuf = append(d.escBuf, d.buf[startUnesc+d.r0:d.r1]...)
 		taken = d.escBuf[startEsc:]
 	}
-	if !utf8.Valid(taken) {
+	if !d.legacy && !utf8.Valid(taken) {
 		// TODO point directly to the offending sequence.
 		return taken, start, d.syntaxErrorf(start, "invalid utf-8 sequence in token %q", taken)
 	}
