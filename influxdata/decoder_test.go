@@ -140,6 +140,7 @@ var decoderTests = []struct {
 	// contains a corresponding ∑ character, signifying that
 	// it's expected to be a DecodeError at that error position.
 	text   string
+	legacy bool
 	expect []Point
 }{{
 	testName: "all-fields-present-no-escapes",
@@ -368,6 +369,27 @@ next§ §x=1§`,
 			Error: `at line ∑¹: expected closing quote for string field value, found end of input`,
 		}},
 	}},
+}, {
+	testName: "legacy-point-with-invalid-things-in",
+	text:     "m\xff\x00,§\x00=xx,t\xfe\x01=v\xfd\x00,\xff=yy §f\xff\x00=1§",
+	legacy:   true,
+	expect: []Point{{
+		Measurement: "m\xff\x00",
+		Tags: []TagKeyValue{{
+			Key:   "\x00",
+			Value: "xx",
+		}, {
+			Key:   "t\xfe\x01",
+			Value: "v\xfd\x00",
+		}, {
+			Key:   "\xff",
+			Value: "yy",
+		}},
+		Fields: []FieldKeyValue{{
+			Key:   "f\xff\x00",
+			Value: 1.0,
+		}},
+	}},
 }}
 
 func TestDecoder(t *testing.T) {
@@ -377,6 +399,9 @@ func TestDecoder(t *testing.T) {
 			// Remove section and entry separators, as we're testing all sections.
 			errp, text := makeErrPositions(test.text)
 			dec := NewDecoderWithBytes([]byte(removeTestSeparators(text)))
+			if test.legacy {
+				dec.SetLegacy()
+			}
 			assertDecodeResult(c, dec, test.expect, false, errp)
 		})
 	}
@@ -430,6 +455,9 @@ func TestDecoderAtSection(t *testing.T) {
 
 						c.Logf("trying entry %d: %q", i, sectText)
 						dec := NewDecoderAtSection([]byte(sectText), Section(sect))
+						if test.legacy {
+							dec.SetLegacy()
+						}
 						for _, checkSection := range sectionCheckers[sect:] {
 							checkSection(c, dec, test.expect[i], errp)
 						}
@@ -502,6 +530,9 @@ func TestDecoderSkipSection(t *testing.T) {
 					// Remove section and entry separators, as we're scanning all sections.
 					errp, text := makeErrPositions(test.text)
 					dec := NewDecoderWithBytes([]byte(removeTestSeparators(text)))
+					if test.legacy {
+						dec.SetLegacy()
+					}
 					i := 0
 					for dec.Next() {
 						if i >= len(test.expect) {
@@ -563,6 +594,22 @@ func TestDecoderDecodeTagsOnly(t *testing.T) {
 	c.Assert(err, qt.ErrorMatches, `at line 1:18: expected field key but none found`)
 }
 
+func TestDecodeWithReadError(t *testing.T) {
+	c := qt.New(t)
+	readErr := fmt.Errorf("some read error")
+	dec := NewDecoder(errorReader{
+		r:   strings.NewReader("m1,t1"),
+		err: readErr,
+	})
+	c.Assert(dec.Next(), qt.Equals, true)
+	_, err := dec.Measurement()
+	c.Assert(err, qt.IsNil)
+	_, _, err = dec.NextTag()
+	c.Assert(err, qt.ErrorMatches, ".*: empty tag name")
+	c.Assert(dec.Err(), qt.ErrorMatches, `some read error`)
+	c.Assert(errors.Is(dec.Err(), readErr), qt.Equals, true)
+}
+
 var decoderTakeTests = []struct {
 	testName    string
 	newDecoder  func(s string) *Decoder
@@ -590,7 +637,7 @@ var decoderTakeTests = []struct {
 }, {
 	testName: "error-reader",
 	newDecoder: func(s string) *Decoder {
-		return NewDecoder(&errorReader{
+		return NewDecoder(errorReader{
 			r:   strings.NewReader(s),
 			err: fmt.Errorf("some error"),
 		})
@@ -799,7 +846,7 @@ type errorReader struct {
 	err error
 }
 
-func (r *errorReader) Read(buf []byte) (int, error) {
+func (r errorReader) Read(buf []byte) (int, error) {
 	n, err := r.r.Read(buf)
 	if err != nil {
 		err = r.err

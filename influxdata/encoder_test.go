@@ -14,8 +14,8 @@ func TestEncoderWithDecoderTests(t *testing.T) {
 	c := qt.New(t)
 	runTests := func(c *qt.C, lax bool) {
 		for _, test := range decoderTests {
-			if pointsHaveError(test.expect) {
-				// Can't encode a test that results in an error.
+			if pointsHaveError(test.expect) || test.legacy {
+				// Can't encode a test that results in an error or that requires invalid values.
 				continue
 			}
 			c.Run(test.testName, func(c *qt.C) {
