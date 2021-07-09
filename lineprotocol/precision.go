@@ -1,4 +1,4 @@
-package influxdata
+package lineprotocol
 
 import (
 	"fmt"
@@ -33,6 +33,7 @@ func (p Precision) asNanoseconds(x int64) (int64, bool) {
 }
 
 // Duration returns the time duration for the given precision.
+// For example, Second.Duration() is time.Second.
 func (p Precision) Duration() time.Duration {
 	switch p {
 	case Nanosecond:
@@ -47,6 +48,7 @@ func (p Precision) Duration() time.Duration {
 	panic(fmt.Errorf("unknown precision %d", p))
 }
 
+// String returns p as a string (ns, µs, ms or s).
 func (p Precision) String() string {
 	switch p {
 	case Nanosecond:

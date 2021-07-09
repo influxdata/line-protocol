@@ -1,4 +1,4 @@
-package influxdata
+package lineprotocol
 
 import "fmt"
 
@@ -23,10 +23,15 @@ var kinds = []string{
 	Bool:    "bool",
 }
 
+// String returns k as a string. It panics if k isn't one of the
+// enumerated ValueKind constants. The string form is
+// the lower-case form of the constant.
 func (k ValueKind) String() string {
 	return kinds[k]
 }
 
+// MarshalText implements encoding.TextMarshaler for ValueKind.
+// It returns an error if k is Unknown.
 func (k ValueKind) MarshalText() ([]byte, error) {
 	if k == Unknown {
 		return nil, fmt.Errorf("cannot marshal 'unknown' value type")
@@ -34,6 +39,7 @@ func (k ValueKind) MarshalText() ([]byte, error) {
 	return []byte(k.String()), nil
 }
 
+// UnmarshalText implements encoding.TextUnmarshaler for ValueKind.
 func (k *ValueKind) UnmarshalText(data []byte) error {
 	s := string(data)
 	for i, kstr := range kinds {

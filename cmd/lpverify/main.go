@@ -4,17 +4,17 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/influxdata/line-protocol/v2/influxdata"
+	"github.com/influxdata/line-protocol/v2/lineprotocol"
 )
 
 func main() {
-	dec := influxdata.NewDecoder(os.Stdin)
+	dec := lineprotocol.NewDecoder(os.Stdin)
 	if !verify(dec) {
 		os.Exit(1)
 	}
 }
 
-func verify(dec *influxdata.Decoder) (ok bool) {
+func verify(dec *lineprotocol.Decoder) (ok bool) {
 	logErr := func(err error) {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		ok = false

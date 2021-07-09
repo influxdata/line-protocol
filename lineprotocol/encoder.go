@@ -1,4 +1,4 @@
-package influxdata
+package lineprotocol
 
 import (
 	"fmt"
@@ -14,6 +14,16 @@ import (
 //
 // It is associated with a []byte buffer which is appended to
 // each time a method is called.
+//
+// Methods must be called in the same order that their
+// respective data appears in the line-protocol point (Encoder
+// doesn't reorder anything). That is, for a given entry, methods
+// must be called in the following order:
+//
+//	StartLine
+//	AddTag (zero or more times)
+//	AddField (one or more times)
+//	EndLine (optional)
 //
 // When an error is encountered encoding a point,
 // the Err method returns it, and the erroneous point
@@ -139,8 +149,8 @@ func (e *Encoder) StartLineRaw(name []byte) {
 	e.StartLine(unsafeBytesToString(name))
 }
 
-// AddTag adds a tag to the line. Tags must be added in lexical order
-// and StartLine must be called after Start and before AddField.
+// AddTag adds a tag to the line. Tag keys must be added in lexical order
+// and AddTag must be called after StartLine and before AddField.
 //
 // Neither the key or the value may contain non-printable ASCII
 // characters (0x00 to 0x1f and 0x7f) or invalid UTF-8 or
