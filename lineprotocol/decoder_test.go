@@ -1,4 +1,4 @@
-package influxdata
+package lineprotocol
 
 import (
 	"bytes"

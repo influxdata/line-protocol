@@ -1,4 +1,4 @@
-package influxdata
+package lineprotocol
 
 import (
 	"bytes"
@@ -32,6 +32,7 @@ var (
 	boolSentinel  = [1]byte{'b'}
 )
 
+// MustNewValue is like NewValue except that it panics on failure.
 func MustNewValue(x interface{}) Value {
 	v, ok := NewValue(x)
 	if !ok {

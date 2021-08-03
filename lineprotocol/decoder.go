@@ -1,4 +1,4 @@
-package influxdata
+package lineprotocol
 
 import (
 	"bytes"
@@ -39,6 +39,10 @@ var (
 )
 
 // Decoder implements low level parsing of a set of line-protocol entries.
+//
+// Decoder methods must be called in the same order that their respective
+// sections appear in a line-protocol entry. See the documentation on the
+// Decoder.Next method for details.
 type Decoder struct {
 	// rd holds the reader, if any. If there is no reader,
 	// complete will be true.
@@ -565,6 +569,9 @@ func (d *Decoder) advanceToSection(section Section) (bool, error) {
 //go:generate stringer -type Section
 
 // Section represents one decoder section of a line-protocol entry.
+// An entry consists of a measurement (MeasurementSection),
+// an optional set of tags (TagSection), one or more fields (FieldSection)
+// and an option timestamp (TimeSection).
 type Section byte
 
 const (
@@ -873,6 +880,7 @@ type DecodeError struct {
 	Err error
 }
 
+// Error implements the error interface.
 func (e *DecodeError) Error() string {
 	return fmt.Sprintf("at line %d:%d: %s", e.Line, e.Column, e.Err.Error())
 }

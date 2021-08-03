@@ -1,4 +1,4 @@
-package influxdata
+package lineprotocol
 
 // newByteset returns a set representation
 // of the bytes in the given string.
