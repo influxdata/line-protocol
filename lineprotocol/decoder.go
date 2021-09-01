@@ -66,7 +66,7 @@ type Decoder struct {
 
 	// section holds the current section of the entry that's being
 	// read.
-	section Section
+	section section
 
 	// skipping holds whether we will need
 	// to return the values that we're decoding.
@@ -105,33 +105,6 @@ func NewDecoder(r io.Reader) *Decoder {
 	}
 }
 
-// NewDecoderAtSection returns a decoder that parses the given
-// bytes but starting at the given section. This enables (for example)
-// parsing of the tags section of an entry without the preceding measurement name.
-//
-// This does not scan forward to the given section; it assumes the byte array
-// starts at the given section.
-func NewDecoderAtSection(buf []byte, section Section) *Decoder {
-	dec := &Decoder{
-		buf:      buf,
-		complete: true,
-		escBuf:   make([]byte, 0, 512),
-		section:  section,
-		line:     1,
-	}
-	if section != TagSection || !whitespace.get(dec.at(0)) {
-		return dec
-	}
-	// As a special case, if we're asking to parse the tag section,
-	// move straight to the field section if the start isn't whitespace,
-	// because NextTag assumes that it's positioned at the start
-	// of a valid non-empty tag section. This saves further special cases
-	// below to avoid accepting an entry with a comma followed by whitespace.
-	dec.take(fieldSeparatorSpace)
-	dec.section = FieldSection
-	return dec
-}
-
 // Next advances to the next entry, and reports whether there is an
 // entry available. Syntax errors on individual lines do not cause this
 // to return false (the decoder attempts to recover from badly
@@ -167,7 +140,7 @@ func (d *Decoder) Next() bool {
 		d.advanceToSection(endSection)
 	}
 	d.skipEmptyLines()
-	d.section = MeasurementSection
+	d.section = measurementSection
 	return d.ensure(1)
 }
 
@@ -183,16 +156,11 @@ func (d *Decoder) Err() error {
 func (d *Decoder) Measurement() ([]byte, error) {
 	defer func() {
 	}()
-	if ok, err := d.advanceToSection(MeasurementSection); err != nil {
+	if ok, err := d.advanceToSection(measurementSection); err != nil {
 		return nil, err
 	} else if !ok {
 		return nil, nil
 	}
-	// skipEmptyLines seems like it might be redundant here because d.Next
-	// also skips empty lines, but call it here too, so that
-	// NewDecoderAtSection(MeasurementSection) skips initial
-	// empty/comment lines too. Maybe that's a bad idea.
-	d.skipEmptyLines()
 	d.reset()
 	measure, i0, err := d.takeEsc(measurementChars, &measurementEscapes.revTable)
 	if err != nil {
@@ -214,7 +182,7 @@ func (d *Decoder) Measurement() ([]byte, error) {
 	if err := d.advanceTagComma(); err != nil {
 		return nil, err
 	}
-	d.section = TagSection
+	d.section = tagSection
 	return measure, nil
 }
 
@@ -223,14 +191,14 @@ func (d *Decoder) Measurement() ([]byte, error) {
 // Note that this must be called before NextField because
 // tags precede fields in the line-protocol entry.
 func (d *Decoder) NextTag() (key, value []byte, err error) {
-	if ok, err := d.advanceToSection(TagSection); err != nil {
+	if ok, err := d.advanceToSection(tagSection); err != nil {
 		return nil, nil, err
 	} else if !ok {
 		return nil, nil, nil
 	}
 	if d.ensure(1) && fieldSeparatorSpace.get(d.at(0)) {
 		d.take(fieldSeparatorSpace)
-		d.section = FieldSection
+		d.section = fieldSection
 		return nil, nil, nil
 	}
 	tagKey, i0, err := d.takeEsc(tagKeyChars, &tagKeyEscapes.revTable)
@@ -257,7 +225,7 @@ func (d *Decoder) NextTag() (key, value []byte, err error) {
 		// This means that we'll see all the tags even when there's no value,
 		// and it also allows a client to parse the tags in isolation even when there
 		// are no keys. We'll return an error if the client tries to read values from here.
-		d.section = FieldSection
+		d.section = fieldSection
 		return tagKey, tagVal, nil
 	}
 	if err := d.advanceTagComma(); err != nil {
@@ -298,7 +266,7 @@ func (d *Decoder) advanceTagComma() error {
 func (d *Decoder) NextFieldBytes() (key []byte, kind ValueKind, value []byte, err error) {
 	defer func() {
 	}()
-	if ok, err := d.advanceToSection(FieldSection); err != nil {
+	if ok, err := d.advanceToSection(fieldSection); err != nil {
 		return nil, Unknown, nil, err
 	} else if !ok {
 		return nil, Unknown, nil, nil
@@ -379,7 +347,7 @@ func (d *Decoder) NextFieldBytes() (key []byte, kind ValueKind, value []byte, er
 		d.section = endSection
 		return fieldKey, fieldKind, fieldVal, nil
 	}
-	d.section = TimeSection
+	d.section = timeSection
 	return fieldKey, fieldKind, fieldVal, nil
 }
 
@@ -423,7 +391,7 @@ func (d *Decoder) NextField() (key []byte, val Value, err error) {
 	// Even though NextFieldBytes calls advanceToSection,
 	// we need to call it here too so that we know exactly where
 	// the field starts so that startIndex is accurate.
-	if ok, err := d.advanceToSection(FieldSection); err != nil {
+	if ok, err := d.advanceToSection(fieldSection); err != nil {
 		return nil, Value{}, err
 	} else if !ok {
 		return nil, Value{}, nil
@@ -450,7 +418,7 @@ func (d *Decoder) NextField() (key []byte, val Value, err error) {
 // TimeBytes returns the timestamp of the entry as a byte slice.
 // If there is no timestamp, it returns nil, nil.
 func (d *Decoder) TimeBytes() ([]byte, error) {
-	if ok, err := d.advanceToSection(TimeSection); err != nil {
+	if ok, err := d.advanceToSection(timeSection); err != nil {
 		return nil, err
 	} else if !ok {
 		return nil, nil
@@ -547,7 +515,7 @@ func (d *Decoder) skipEmptyLines() {
 	}
 }
 
-func (d *Decoder) advanceToSection(section Section) (bool, error) {
+func (d *Decoder) advanceToSection(section section) (bool, error) {
 	if d.section == section {
 		return true, nil
 	}
@@ -566,19 +534,19 @@ func (d *Decoder) advanceToSection(section Section) (bool, error) {
 	return true, nil
 }
 
-//go:generate stringer -type Section
+//go:generate stringer -type section
 
-// Section represents one decoder section of a line-protocol entry.
-// An entry consists of a measurement (MeasurementSection),
-// an optional set of tags (TagSection), one or more fields (FieldSection)
-// and an option timestamp (TimeSection).
-type Section byte
+// section represents one decoder section of a line-protocol entry.
+// An entry consists of a measurement (measurementSection),
+// an optional set of tags (tagSection), one or more fields (fieldSection)
+// and an option timestamp (timeSection).
+type section byte
 
 const (
-	MeasurementSection Section = iota
-	TagSection
-	FieldSection
-	TimeSection
+	measurementSection section = iota
+	tagSection
+	fieldSection
+	timeSection
 
 	// newlineSection represents the newline at the end of the line.
 	// This section also absorbs any invalid characters at the end
@@ -587,30 +555,30 @@ const (
 	newlineSection
 
 	// endSection represents the end of an entry. When we're at this
-	// stage, calling More will cycle back to MeasurementSection again.
+	// stage, calling More will cycle back to measurementSection again.
 	endSection
 )
 
 func (d *Decoder) consumeSection() error {
 	switch d.section {
-	case MeasurementSection:
+	case measurementSection:
 		_, err := d.Measurement()
 		return err
-	case TagSection:
+	case tagSection:
 		for {
 			key, _, err := d.NextTag()
 			if err != nil || key == nil {
 				return err
 			}
 		}
-	case FieldSection:
+	case fieldSection:
 		for {
 			key, _, _, err := d.NextFieldBytes()
 			if err != nil || key == nil {
 				return err
 			}
 		}
-	case TimeSection:
+	case timeSection:
 		_, err := d.TimeBytes()
 		return err
 	case newlineSection:

@@ -35,7 +35,7 @@ type Encoder struct {
 	// lineStart holds the index of the start of the current line.
 	lineStart int
 	// section holds the section of line that's about to be added.
-	section Section
+	section section
 	// lax holds whether keys and values are checked for validity
 	// when being encoded.
 	lax bool
@@ -65,7 +65,7 @@ func (e *Encoder) SetBuffer(buf []byte) {
 	e.buf = buf
 	e.pointIndex = 0
 	e.ClearErr()
-	e.section = MeasurementSection
+	e.section = measurementSection
 }
 
 // SetPrecision sets the precision used to encode the time stamps
@@ -115,8 +115,8 @@ func (e *Encoder) ClearErr() {
 func (e *Encoder) StartLine(measurement string) {
 	section := e.section
 	e.pointIndex++
-	e.section = TagSection
-	if section == TagSection {
+	e.section = tagSection
+	if section == tagSection {
 		// This error is unusual, because it indicates an error on the previous
 		// line, even though there's probably not an error on this line, so
 		// don't return here. This means that unfortunately, if you
@@ -135,7 +135,7 @@ func (e *Encoder) StartLine(measurement string) {
 			return
 		}
 	}
-	if section != MeasurementSection && section != endSection {
+	if section != measurementSection && section != endSection {
 		// This isn't the first line, and EndLine hasn't been explicitly called,
 		// so we need a newline separator.
 		e.buf = append(e.buf, '\n')
@@ -156,7 +156,7 @@ func (e *Encoder) StartLineRaw(name []byte) {
 // characters (0x00 to 0x1f and 0x7f) or invalid UTF-8 or
 // a trailing backslash character.
 func (e *Encoder) AddTag(key, value string) {
-	if e.section != TagSection {
+	if e.section != tagSection {
 		e.setErrorf("tag must be added after adding a measurement and before adding fields")
 		return
 	}
@@ -198,12 +198,12 @@ func (e *Encoder) AddTagRaw(key, value []byte) {
 // AddField adds a field to the line. AddField must be called after AddTag
 // or AddMeasurement. At least one field must be added to each line.
 func (e *Encoder) AddField(key string, value Value) {
-	if e.section != FieldSection && e.section != TagSection {
+	if e.section != fieldSection && e.section != tagSection {
 		e.setErrorf("field must be added after tag or measurement section")
 		return
 	}
 	section := e.section
-	e.section = FieldSection
+	e.section = fieldSection
 	if !e.lax {
 		if !validMeasurementOrKey(key) {
 			e.setErrorf("invalid field key %q", key)
@@ -213,7 +213,7 @@ func (e *Encoder) AddField(key string, value Value) {
 	if e.lineHasError {
 		return
 	}
-	if section == TagSection {
+	if section == tagSection {
 		e.buf = append(e.buf, ' ')
 	} else {
 		e.buf = append(e.buf, ',')
@@ -243,7 +243,7 @@ var (
 // If the time is outside the maximum representable time range,
 // an ErrRange error will be returned.
 func (e *Encoder) EndLine(t time.Time) {
-	if e.section != FieldSection {
+	if e.section != fieldSection {
 		e.setErrorf("timestamp must be added after adding at least one field")
 		return
 	}
@@ -284,7 +284,7 @@ func (e *Encoder) setErrorf(format string, arg ...interface{}) {
 	e.buf = e.buf[:e.lineStart]
 	if len(e.buf) == 0 {
 		// Make sure the next entry doesn't add a newline.
-		e.section = MeasurementSection
+		e.section = measurementSection
 	}
 }
 

@@ -41,7 +41,7 @@ func isDecodeError(err error) bool {
 // sectionCheckers holds a function for each section that checks that the result of decoding
 // for that section is as expected.
 var sectionCheckers = []func(c *qt.C, dec *Decoder, expect Point, errp errPositions){
-	MeasurementSection: func(c *qt.C, dec *Decoder, expect Point, errp errPositions) {
+	measurementSection: func(c *qt.C, dec *Decoder, expect Point, errp errPositions) {
 		m, err := dec.Measurement()
 		if expect.MeasurementError != "" {
 			c.Assert(err, qt.Satisfies, isDecodeError)
@@ -52,7 +52,7 @@ var sectionCheckers = []func(c *qt.C, dec *Decoder, expect Point, errp errPositi
 		c.Assert(err, qt.IsNil)
 		c.Assert(string(m), qt.Equals, expect.Measurement, qt.Commentf("runes: %x", []rune(string(m))))
 	},
-	TagSection: func(c *qt.C, dec *Decoder, expect Point, errp errPositions) {
+	tagSection: func(c *qt.C, dec *Decoder, expect Point, errp errPositions) {
 		var tags []TagKeyValue
 		for {
 			key, value, err := dec.NextTag()
@@ -81,7 +81,7 @@ var sectionCheckers = []func(c *qt.C, dec *Decoder, expect Point, errp errPositi
 		}
 		c.Assert(tags, qt.DeepEquals, expectTags)
 	},
-	FieldSection: func(c *qt.C, dec *Decoder, expect Point, errp errPositions) {
+	fieldSection: func(c *qt.C, dec *Decoder, expect Point, errp errPositions) {
 		var fields []FieldKeyValue
 		for {
 			key, value, err := dec.NextField()
@@ -114,7 +114,7 @@ var sectionCheckers = []func(c *qt.C, dec *Decoder, expect Point, errp errPositi
 		}
 		c.Assert(fields, qt.DeepEquals, expectFields)
 	},
-	TimeSection: func(c *qt.C, dec *Decoder, expect Point, errp errPositions) {
+	timeSection: func(c *qt.C, dec *Decoder, expect Point, errp errPositions) {
 		timeBytes, err := dec.TimeBytes()
 		if expect.TimeError != "" {
 			c.Assert(err, qt.Satisfies, isDecodeError)
@@ -407,51 +407,18 @@ func assertDecodeResult(c *qt.C, dec *Decoder, expect []Point, allowMore bool, e
 	return i
 }
 
-func TestDecoderAtSection(t *testing.T) {
-	c := qt.New(t)
-	for _, test := range decoderTests {
-		c.Run(test.testName, func(c *qt.C) {
-			for secti := range sectionCheckers {
-				sect := Section(secti)
-				c.Run(sect.String(), func(c *qt.C) {
-					entries := strings.Split(test.text, "¶")
-					c.Assert(entries, qt.HasLen, len(test.expect))
-					for i, entry := range entries {
-						sections := strings.Split(entry, "§")
-						c.Assert(sections, qt.HasLen, int(TimeSection)+1)
-						// Decode all sections at sect and beyond unless there was
-						// a previous error, in which case the parser will have consumed
-						// the rest of the line.
-						if expectedSectionError(test.expect[i], sect-1) != "" {
-							continue
-						}
-						sectText := strings.Join(sections[sect:], "")
-						errp, sectText := makeErrPositions(sectText)
-
-						c.Logf("trying entry %d: %q", i, sectText)
-						dec := NewDecoderAtSection([]byte(sectText), Section(sect))
-						for _, checkSection := range sectionCheckers[sect:] {
-							checkSection(c, dec, test.expect[i], errp)
-						}
-					}
-				})
-			}
-		})
-	}
-}
-
-func doSection(dec *Decoder, section Section) error {
+func doSection(dec *Decoder, section section) error {
 	switch section {
-	case MeasurementSection:
+	case measurementSection:
 		_, err := dec.Measurement()
 		return err
-	case TagSection:
+	case tagSection:
 		_, _, err := dec.NextTag()
 		return err
-	case FieldSection:
+	case fieldSection:
 		_, _, _, err := dec.NextFieldBytes()
 		return err
-	case TimeSection:
+	case timeSection:
 		_, err := dec.TimeBytes()
 		return err
 	}
@@ -461,25 +428,25 @@ func doSection(dec *Decoder, section Section) error {
 // expectedSectionError returns the error that's expected when
 // reading any complete section up to and including
 // the given section.
-func expectedSectionError(p Point, section Section) string {
+func expectedSectionError(p Point, section section) string {
 	switch section {
-	case MeasurementSection:
+	case measurementSection:
 		if p.MeasurementError != "" {
 			return p.MeasurementError
 		}
-	case TagSection:
+	case tagSection:
 		for _, tag := range p.Tags {
 			if tag.Error != "" {
 				return tag.Error
 			}
 		}
-	case FieldSection:
+	case fieldSection:
 		for _, field := range p.Fields {
 			if field.Error != "" {
 				return field.Error
 			}
 		}
-	case TimeSection:
+	case timeSection:
 		if p.TimeError != "" {
 			return p.TimeError
 		}
@@ -497,7 +464,7 @@ func TestDecoderSkipSection(t *testing.T) {
 	for _, test := range decoderTests {
 		c.Run(test.testName, func(c *qt.C) {
 			for secti := range sectionCheckers {
-				sect := Section(secti)
+				sect := section(secti)
 				c.Run(sect.String(), func(c *qt.C) {
 					// Remove section and entry separators, as we're scanning all sections.
 					errp, text := makeErrPositions(test.text)
@@ -530,37 +497,6 @@ func removeTestSeparators(s string) string {
 	s = strings.Replace(s, "¶", "", -1)
 	s = strings.Replace(s, "§", "", -1)
 	return s
-}
-
-func TestDecoderDecodeTagsOnly(t *testing.T) {
-	// One specific use case we'd like to support is that of decoding just
-	// the tags on their, own.
-	c := qt.New(t)
-	dec := NewDecoderAtSection([]byte(`a=b,c=hello\,,d=e`), TagSection)
-	var tags []TagKeyValue
-	for {
-		key, val, err := dec.NextTag()
-		c.Assert(err, qt.IsNil)
-		if key == nil {
-			break
-		}
-		tags = append(tags, TagKeyValue{
-			Key:   string(key),
-			Value: string(val),
-		})
-	}
-	c.Assert(tags, qt.DeepEquals, []TagKeyValue{{
-		Key:   "a",
-		Value: "b",
-	}, {
-		Key:   "c",
-		Value: "hello,",
-	}, {
-		Key:   "d",
-		Value: "e",
-	}})
-	_, _, err := dec.NextField()
-	c.Assert(err, qt.ErrorMatches, `at line 1:18: expected field key but none found`)
 }
 
 var decoderTakeTests = []struct {
