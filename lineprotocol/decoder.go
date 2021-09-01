@@ -154,8 +154,6 @@ func (d *Decoder) Err() error {
 // Measurement returns the measurement name. It returns nil
 // unless called before NextTag, NextField or Time.
 func (d *Decoder) Measurement() ([]byte, error) {
-	defer func() {
-	}()
 	if ok, err := d.advanceToSection(measurementSection); err != nil {
 		return nil, err
 	} else if !ok {
@@ -209,7 +207,10 @@ func (d *Decoder) NextTag() (key, value []byte, err error) {
 		if !d.ensure(1) {
 			return nil, nil, d.syntaxErrorf(i0, "empty tag name")
 		}
-		return nil, nil, d.syntaxErrorf(i0, "expected '=' after tag key %q, but got %q instead", tagKey, d.at(0))
+		if len(tagKey) > 0 {
+			return nil, nil, d.syntaxErrorf(i0, "expected '=' after tag key %q, but got %q instead", tagKey, d.at(0))
+		}
+		return nil, nil, d.syntaxErrorf(i0, "expected tag key or field but found %q instead", d.at(0))
 	}
 	d.advance(1)
 	tagVal, i0, err := d.takeEsc(tagValChars, &tagValEscapes.revTable)
@@ -264,8 +265,6 @@ func (d *Decoder) advanceTagComma() error {
 // The returned value slice may not be valid: to
 // check its validity, use NewValueFromBytes(kind, value), or use NextField.
 func (d *Decoder) NextFieldBytes() (key []byte, kind ValueKind, value []byte, err error) {
-	defer func() {
-	}()
 	if ok, err := d.advanceToSection(fieldSection); err != nil {
 		return nil, Unknown, nil, err
 	} else if !ok {
@@ -531,7 +530,7 @@ func (d *Decoder) advanceToSection(section section) (bool, error) {
 		}
 	}
 	d.skipping = false
-	return true, nil
+	return d.section == section, nil
 }
 
 //go:generate stringer -type section
@@ -829,8 +828,11 @@ func (d *Decoder) syntaxErrorf(offset int, f string, a ...interface{}) error {
 	line := d.line - int64(bytes.Count(remain, newlineBytes))
 
 	// We'll recover from a syntax error by reading all bytes until
-	// the next newline.
-	d.section = newlineSection
+	// the next newline. We don't want to do that if we've already
+	// just scanned the end of a line.
+	if d.section != endSection {
+		d.section = newlineSection
+	}
 	return &DecodeError{
 		Line:   line,
 		Column: column,

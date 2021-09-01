@@ -134,10 +134,8 @@ var sectionCheckers = []func(c *qt.C, dec *Decoder, expect Point, errp errPositi
 var decoderTests = []struct {
 	testName string
 	// text holds the text to be decoded.
-	// sections are separated by § characters.
-	// entries are separated by ¶ characters.
 	// the position of an error is marked by a ∑ character (the error
-	// contains a corresponding ∑ character, signifying that
+	// string contains a corresponding ∑ character, signifying that
 	// it's expected to be a DecodeError at that error position.
 	text   string
 	expect []Point
@@ -145,7 +143,7 @@ var decoderTests = []struct {
 	testName: "all-fields-present-no-escapes",
 	text: `
    # comment
- somename,§tag1=val1,tag2=val2  §floatfield=1,strfield="hello",intfield=-1i,uintfield=1u,boolfield=true  §1602841605822791506
+ somename,tag1=val1,tag2=val2  floatfield=1,strfield="hello",intfield=-1i,uintfield=1u,boolfield=true  1602841605822791506
 `,
 	expect: []Point{{
 		Measurement: "somename",
@@ -178,8 +176,8 @@ var decoderTests = []struct {
 	testName: "multiple-entries",
 	text: `
    # comment
- m1,§tag1=val1  §x="first"  §1602841605822791506
-¶  m2,§foo=bar  §x="second"  §1602841605822792000
+ m1,tag1=val1  x="first"  1602841605822791506
+  m2,foo=bar  x="second"  1602841605822792000
 
  # last comment
 `,
@@ -207,10 +205,68 @@ var decoderTests = []struct {
 		Time: "1602841605822792000",
 	}},
 }, {
+	testName: "multiple-entries-with-error#1",
+	text: `
+m1 value=12.0
+m2 value=∑¹2a.0
+m3 value=32.0
+m4 value=42.0
+`,
+	expect: []Point{{
+		Measurement: "m1",
+		Fields: []FieldKeyValue{{
+			Key:   "value",
+			Value: 12.0,
+		}},
+	}, {
+		Measurement: "m2",
+		Fields: []FieldKeyValue{{
+			Error: `at line ∑¹: cannot parse value for field key "value": invalid float value syntax`,
+		}},
+	}, {
+		Measurement: "m3",
+		Fields: []FieldKeyValue{{
+			Key:   "value",
+			Value: 32.0,
+		}},
+	}, {
+		Measurement: "m4",
+		Fields: []FieldKeyValue{{
+			Key:   "value",
+			Value: 42.0,
+		}},
+	}},
+}, {
+	testName: "multiple-entries-with-error#2",
+	text: `
+m1 value=12.0
+m2∑¹
+m3 value=32.0
+`,
+	expect: []Point{{
+		Measurement: "m1",
+		Fields: []FieldKeyValue{{
+			Key:   "value",
+			Value: 12.0,
+		}},
+	}, {
+		Measurement: "m2",
+		// DecoderSkipSection: expect to see no error on TagSection but got error
+		Tags: []TagKeyValue{{
+			Error: `at line ∑¹: expected tag key or field but found '\n' instead`,
+		}},
+	}, {
+		Measurement: "m3",
+		Fields: []FieldKeyValue{{
+			Key:   "value",
+			Value: 32.0,
+		}},
+	}},
+}, {
 	testName: "escaped-values",
 	text: `
- comma\,1,§equals\==e\,x,two=val2 §field\=x="fir\"
-,st\\"  §1602841605822791506
+ comma\,1,equals\==e\,x,two=val2 field\=x="fir\"
+,st\\"  1602841605822791506
 
  # last comment
 `,
@@ -231,7 +287,7 @@ var decoderTests = []struct {
 	}},
 }, {
 	testName: "missing-quotes",
-	text:     `TestBucket§ §FieldOné=∑¹Happy,FieldTwo=sad§`,
+	text:     `TestBucket FieldOné=∑¹Happy,FieldTwo=sad`,
 	expect: []Point{{
 		Measurement: "TestBucket",
 		Fields: []FieldKeyValue{{
@@ -240,8 +296,8 @@ var decoderTests = []struct {
 	}},
 }, {
 	testName: "trailing-comma-after-measurement",
-	text: `TestBuckét,∑¹§ §FieldOne=Happy§¶
-next§ §x=1§`,
+	text: `TestBuckét,∑¹ FieldOne=Happy
+next x=1`,
 	expect: []Point{{
 		MeasurementError: "at line ∑¹: expected tag key after comma; got white space instead",
 	}, {
@@ -253,7 +309,7 @@ next§ §x=1§`,
 	}},
 }, {
 	testName: "missing-comma-after-field",
-	text:     `TestBuckét§ §TagOné="Happy" §∑¹FieldOne=123.45`,
+	text:     `TestBuckét TagOné="Happy" ∑¹FieldOne=123.45`,
 	expect: []Point{{
 		Measurement: "TestBuckét",
 		Fields: []FieldKeyValue{{
@@ -264,7 +320,7 @@ next§ §x=1§`,
 	}},
 }, {
 	testName: "missing timestamp",
-	text:     "b§ §f=1§",
+	text:     "b f=1",
 	expect: []Point{{
 		Measurement: "b",
 		Fields: []FieldKeyValue{{
@@ -275,7 +331,7 @@ next§ §x=1§`,
 	}},
 }, {
 	testName: "missing timestamp with newline",
-	text:     "b§ §f=1§\n",
+	text:     "b f=1\n",
 	expect: []Point{{
 		Measurement: "b",
 		Fields: []FieldKeyValue{{
@@ -286,7 +342,7 @@ next§ §x=1§`,
 	}},
 }, {
 	testName: "field-with-space-and-no-timestamp",
-	text:     "9§ §f=-7 §",
+	text:     "9 f=-7 ",
 	expect: []Point{{
 		Measurement: "9",
 		Fields: []FieldKeyValue{{
@@ -297,7 +353,7 @@ next§ §x=1§`,
 	}},
 }, {
 	testName: "carriage-returns",
-	text:     "# foo\r\nm§ §x=1§\r\n\r\n",
+	text:     "# foo\r\nm x=1\r\n\r\n",
 	expect: []Point{{
 		Measurement: "m",
 		Fields: []FieldKeyValue{{
@@ -307,7 +363,7 @@ next§ §x=1§`,
 	}},
 }, {
 	testName: "carriage-return-in-comment",
-	text:     "§§§∑¹# foo\rxxx\n¶m§ §x=1§\r\n\r\n",
+	text:     "∑¹# foo\rxxx\nm x=1\r\n\r\n",
 	expect: []Point{{
 		MeasurementError: "at line ∑¹: invalid character found in comment line",
 	}, {
@@ -321,7 +377,7 @@ next§ §x=1§`,
 	// This test ensures that the ErrValueOutOfRange error is
 	// propagated correctly with errors.Is
 	testName: "out-of-range-value",
-	text:     "mmmé§ §é=∑¹1e9999999999999§",
+	text:     "mmmé é=∑¹1e9999999999999",
 	expect: []Point{{
 		Measurement: "mmmé",
 		Fields: []FieldKeyValue{{
@@ -334,7 +390,7 @@ next§ §x=1§`,
 	// if we ever change error behaviour so that the caller
 	// can see multiple errors on a single line, this test should
 	// fail (see comment in the Next method).
-	text: "m§ §f=1,∑¹\x01=1,\x01=2§",
+	text: "m f=1,∑¹\x01=1,\x01=2",
 	expect: []Point{{
 		Measurement: "m",
 		Fields: []FieldKeyValue{{
@@ -346,7 +402,7 @@ next§ §x=1§`,
 	}},
 }, {
 	testName: "field-value-error-after-newline-in-string",
-	text:     "m§ §f=\"hello\ngoodbye\nx\",gé=∑¹invalid§",
+	text:     "m f=\"hello\ngoodbye\nx\",gé=∑¹invalid",
 	expect: []Point{{
 		Measurement: "m",
 		Fields: []FieldKeyValue{{
@@ -358,7 +414,7 @@ next§ §x=1§`,
 	}},
 }, {
 	testName: "field-string-value-error-after-newline-in-string",
-	text:     "m§ §f=\"a\nb\",g=∑¹\"c\nd§",
+	text:     "m f=\"a\nb\",g=∑¹\"c\nd",
 	expect: []Point{{
 		Measurement: "m",
 		Fields: []FieldKeyValue{{
@@ -374,9 +430,8 @@ func TestDecoder(t *testing.T) {
 	c := qt.New(t)
 	for _, test := range decoderTests {
 		c.Run(test.testName, func(c *qt.C) {
-			// Remove section and entry separators, as we're testing all sections.
 			errp, text := makeErrPositions(test.text)
-			dec := NewDecoderWithBytes([]byte(removeTestSeparators(text)))
+			dec := NewDecoderWithBytes([]byte(text))
 			assertDecodeResult(c, dec, test.expect, false, errp)
 		})
 	}
@@ -466,18 +521,17 @@ func TestDecoderSkipSection(t *testing.T) {
 			for secti := range sectionCheckers {
 				sect := section(secti)
 				c.Run(sect.String(), func(c *qt.C) {
-					// Remove section and entry separators, as we're scanning all sections.
 					errp, text := makeErrPositions(test.text)
-					dec := NewDecoderWithBytes([]byte(removeTestSeparators(text)))
+					dec := NewDecoderWithBytes([]byte(text))
 					i := 0
 					for dec.Next() {
 						if i >= len(test.expect) {
 							continue
 						}
-						if e := expectedSectionError(test.expect[i], sect-1); e != "" && !strings.Contains(e, "out of range") {
+						if e := expectedSectionError(test.expect[i], sect-1); e != "" && !strings.Contains(e, "cannot parse value for field key") {
 							// If there's an error earlier in the line, it gets returned on the
-							// later section (unless it's an out of range error, in which case it's technically valid
-							// syntax)
+							// later section (unless it's an error parsing a field value, in which case
+							// the syntax checking is more lax).
 							c.Assert(doSection(dec, sect), qt.ErrorMatches, regexp.QuoteMeta(errp.makeErr(e)))
 						} else {
 							sectionCheckers[sect](c, dec, test.expect[i], errp)
@@ -489,14 +543,6 @@ func TestDecoderSkipSection(t *testing.T) {
 			}
 		})
 	}
-}
-
-func removeTestSeparators(s string) string {
-	// Note: we can't use strings.Map here because we
-	// need to preserve invalid utf-8 sequences.
-	s = strings.Replace(s, "¶", "", -1)
-	s = strings.Replace(s, "§", "", -1)
-	return s
 }
 
 var decoderTakeTests = []struct {
@@ -1163,8 +1209,7 @@ func (errp errPositions) makeErr(s string) string {
 }
 
 // makeErrPositions returns the positions of all the ∑ markers
-// in the text (ignoring section (§) and entry (¶) characters),
-// keyed by the character following the ∑.
+// in the text keyed by the character following the ∑.
 //
 // It also returns the text with the ∑ markers removed.
 func makeErrPositions(text string) (errPositions, string) {
@@ -1185,8 +1230,6 @@ func makeErrPositions(text string) (errPositions, string) {
 			_, size = utf8.DecodeRuneInString(text[size:])
 			repls = append(repls, text[:len("∑")+size], currPos.String())
 			text = text[len("∑"):]
-		case '§', '¶':
-			buf = append(buf, text[:size]...)
 		default:
 			buf = append(buf, text[:size]...)
 			currPos.column += size
@@ -1231,10 +1274,10 @@ func TestErrorPositions(t *testing.T) {
 		expectErr:  "foo: at line 3:1: blah",
 		expectText: "a\nbácheléloblah\nx\n",
 	}, {
-		text:       "§¶a¶∑¹x",
+		text:       "a∑¹x",
 		err:        "at line ∑¹: blah",
 		expectErr:  "at line 1:2: blah",
-		expectText: "§¶a¶x",
+		expectText: "ax",
 	}}
 	c := qt.New(t)
 	for _, test := range tests {
