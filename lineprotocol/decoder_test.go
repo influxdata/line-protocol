@@ -424,6 +424,69 @@ next x=1`,
 			Error: `at line ∑¹: expected closing quote for string field value, found end of input`,
 		}},
 	}},
+}, {
+	testName: "non-printable-ASCII-in-tag-key",
+	text:     "m foo∑¹\x01=bar x=1",
+	expect: []Point{{
+		Measurement: "m",
+		Fields: []FieldKeyValue{{
+			Error: `at line ∑¹: want '=' after field key "foo", found '\x01'`,
+		}},
+	}},
+}, {
+	testName: "non-printable-ASCII-in-tag-key",
+	text:     "m,∑¹foo\x03=bar x=1",
+	expect: []Point{{
+		Measurement: "m",
+		Tags: []TagKeyValue{{
+			Error: `at line ∑¹: expected '=' after tag key "foo", but got '\x03' instead`,
+		}},
+	}},
+}, {
+	testName: "non-printable-ASCII-in-tag-value",
+	text:     "m,foo=bar∑¹\x02 x=1",
+	expect: []Point{{
+		Measurement: "m",
+		Tags: []TagKeyValue{{
+			Key:   "foo",
+			Value: "bar",
+		}, {
+			Error: `at line ∑¹: expected tag key or field but found '\x02' instead`,
+		}},
+	}},
+}, {
+	testName: "non-printable-ASCII-in-field-key",
+	text:     "m foo∑¹\x01=bar",
+	expect: []Point{{
+		Measurement: "m",
+		Fields: []FieldKeyValue{{
+			Error: `at line ∑¹: want '=' after field key "foo", found '\x01'`,
+		}},
+	}},
+}, {
+	testName: "backslash-escapes-in-string-field",
+	text:     `m s="\t\r\n\v"`,
+	expect: []Point{{
+		Measurement: "m",
+		Fields: []FieldKeyValue{{
+			Key:   "s",
+			Value: "\t\r\n\\v",
+		}},
+	}},
+}, {
+	testName: "backslash-escapes-in-tags",
+	text:     `m,s=\t\r\n\v x=1`,
+	expect: []Point{{
+		Measurement: "m",
+		Tags: []TagKeyValue{{
+			Key:   "s",
+			Value: `\t\r\n\v`,
+		}},
+		Fields: []FieldKeyValue{{
+			Key:   "x",
+			Value: 1.0,
+		}},
+	}},
 }}
 
 func TestDecoder(t *testing.T) {
