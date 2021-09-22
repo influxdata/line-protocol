@@ -5,5 +5,5 @@ go 1.15
 require (
 	github.com/frankban/quicktest v1.13.0
 	github.com/google/go-cmp v0.5.5
-	github.com/influxdata/line-protocol-corpus v0.0.0-20210519164801-ca6fa5da0184
+	github.com/influxdata/line-protocol-corpus v0.0.0-20210922080147-aa28ccfb8937
 )
