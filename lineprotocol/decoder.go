@@ -19,18 +19,18 @@ const (
 var (
 	fieldSeparatorSpace   = newByteSet(" ")
 	whitespace            = fieldSeparatorSpace.union(newByteSet("\r\n"))
-	tagKeyChars           = newByteSet(",= ").union(nonPrintable).invert()
+	tagKeyChars           = newByteSet(",=").union(whitespace).union(nonPrintable).invert()
 	tagKeyEscapes         = newEscaper(",= ")
 	nonPrintable          = newByteSetRange(0, 31).union(newByteSet("\x7f"))
 	eolChars              = newByteSet("\r\n")
 	measurementChars      = newByteSet(", ").union(nonPrintable).invert()
 	measurementEscapes    = newEscaper(" ,")
-	tagValChars           = newByteSet(",=").union(whitespace).invert()
+	tagValChars           = newByteSet(",=").union(whitespace).union(nonPrintable).invert()
 	tagValEscapes         = newEscaper(", =")
 	fieldKeyChars         = tagKeyChars
 	fieldKeyEscapes       = tagKeyEscapes
 	fieldStringValChars   = newByteSet(`"`).invert()
-	fieldStringValEscapes = newEscaper(`\"`)
+	fieldStringValEscapes = newEscaper("\\\"\n\r\t")
 	fieldValChars         = newByteSet(",").union(whitespace).invert()
 	timeChars             = newByteSet("-0123456789")
 	commentChars          = nonPrintable.invert().without(eolChars)

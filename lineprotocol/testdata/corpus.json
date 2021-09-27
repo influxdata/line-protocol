@@ -132,7 +132,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get field 0: at line 1:39: expected field key but none found"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\x01' instead"
             }
         },
         "00526ccd998f99b5f4fdc94fae8547c5": {
@@ -1343,7 +1343,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 0: at line 1:5: invalid utf-8 sequence in token \"\\\"\\v\\x86\""
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "041a795c367d65d016a8d2292fda65e5": {
@@ -1431,7 +1431,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get field 0: at line 1:75: expected field key but none found"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "04549ec33c42e1b00446ba37a4a7e30e": {
@@ -1455,7 +1455,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: duplicate tag key \"\\\"\""
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "047f255fba26cb30550e3aa977f9bb99": {
@@ -2074,7 +2074,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "062ed7d8099590e82bb448f483e336e1": {
@@ -2298,7 +2298,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "06e1204faf3d60790c7ae785faef2f3c": {
@@ -4344,7 +4344,7 @@
                             {
                                 "key": "v",
                                 "value": {
-                                    "string": "\\r"
+                                    "string": "\r"
                                 }
                             }
                         ]
@@ -5845,7 +5845,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "118c0625f4d9e0a470e9287f9ca9c3e6": {
@@ -6223,7 +6223,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: duplicate tag key \"5\""
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "127de18aabd204c1ee50fa604463171b": {
@@ -6329,7 +6329,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "12bbf3658cae8f11937dfa1fc4ee58dd": {
@@ -7027,7 +7027,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 5: at line 1:33: expected tag key after comma; got end of input"
+                "error": "cannot get metric 0: cannot get tag 0: at line 1:5: expected tag value after tag key \"r\", but none found"
             }
         },
         "15011a3919fd139a856af9bfe1c9d054": {
@@ -8367,7 +8367,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "18cf264c95cec00aabb3448e467f4d84": {
@@ -8831,7 +8831,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 9: at line 1:53: expected tag key after comma; got end of input"
+                "error": "cannot get metric 0: cannot get tag 0: at line 1:5: expected tag value after tag key \"r\", but none found"
             }
         },
         "1a1ce0f04b115affb72d4f10a4a01ff5": {
@@ -10618,7 +10618,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "1ee5d1d47aeed1cbe8f90c8072cd678b": {
@@ -11379,7 +11379,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "217d8b28a7103cfd5b756e5651d3c21e": {
@@ -11760,7 +11760,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: duplicate tag key \"6\""
+                "error": "cannot get metric 0: cannot get tag 0: at line 1:5: expected tag value after tag key \"6\", but none found"
             }
         },
         "226a675433497039b5075809f2c40ed6": {
@@ -13769,7 +13769,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:9: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "274234abcd513cafa398b8e2483c1eb8": {
@@ -14700,7 +14700,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "29de95795cc2291aed477fc1269026b6": {
@@ -15571,7 +15571,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 3: at line 1:20: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "2ca3678468ce926f4fc51dbf18e5da82": {
@@ -17468,7 +17468,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "31b8e8655eb93d7a1508fbc633523482": {
@@ -19032,7 +19032,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "36354a403bb5d9e282b9df58e8ae1e83": {
@@ -19625,7 +19625,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "37e35ed6137786761034c8902755ba81": {
@@ -19759,7 +19759,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 4: cannot get field 0: at line 5:8: expected field key but none found"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "3840dc9730892d2838eea1b3e696dd06": {
@@ -20055,7 +20055,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "39066d08f4592a77c88dc6e66fe5bdcf": {
@@ -20310,7 +20310,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get field 0: at line 1:14: expected field key but none found"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "39bc79a94cca4e017b8d1df30f928a89": {
@@ -21001,7 +21001,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "3bb0f007e4afedeb90639390280c4d28": {
@@ -21917,7 +21917,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get field 0: at line 1:16: expected field key but none found"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "3de21571b18bc6eb9288a3901c964427": {
@@ -22752,7 +22752,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get field 0: at line 1:9: invalid character '\\t' found at start of field key"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "408302fd6e4945787349304fbfda698f": {
@@ -24419,7 +24419,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "4500a996c1f6e7793be85b285222dbbb": {
@@ -26504,7 +26504,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "4af92a776cce841d1901c074888cc55c": {
@@ -28010,7 +28010,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "4f41f21963671091b75b864a14e63ad5": {
@@ -28048,7 +28048,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "4f676439fa5f77dffbe61f5cbb026e21": {
@@ -28712,7 +28712,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get field 0: at line 1:46: expected field key but none found"
+                "error": "cannot get metric 0: cannot get tag 0: at line 1:13: expected tag value after tag key \" _STATE3\", but none found"
             }
         },
         "514786cadc73f2f0b82a863076a4cf9c": {
@@ -29123,7 +29123,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "5286e7a2997157aa95422a9bc5d560bb": {
@@ -29171,7 +29171,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 0: at line 1:5: expected tag value after tag key \"f\", but none found"
             }
         },
         "52a136faa5a4053d8ae5f090092463a6": {
@@ -29700,7 +29700,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "5455cba97be06faf5627cee801b5f74e": {
@@ -30371,7 +30371,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 0: at line 1:5: invalid utf-8 sequence in token \"\\x8d\\v6\""
+                "error": "cannot get metric 0: cannot get tag 0: at line 1:5: invalid utf-8 sequence in token \"\\x8d\""
             }
         },
         "56237430acc001250acea879c0d4fc5e": {
@@ -30481,7 +30481,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "566d7c2d967c1b65e6914912b46f6eae": {
@@ -30543,7 +30543,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "56b9dd976afc7dd5a079ab7a6154d59b": {
@@ -33309,7 +33309,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get field 0: at line 1:25: expected field key but none found"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "5ed1d71f3893f3af84cfb37f168c01aa": {
@@ -33842,7 +33842,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "603402b0a0193f128fdd0eaced3ee238": {
@@ -33902,7 +33902,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 3: cannot get field 0: at line 4:8: expected field key but none found"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "60852e617a976709f68fd6b6b85fe2e5": {
@@ -33914,7 +33914,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "608967e300110384ba931e0b48cffa01": {
@@ -36060,7 +36060,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "666405c3a3b44f0565f813f4d1720d49": {
@@ -38312,7 +38312,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: duplicate tag key \"\\\"\""
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "6d16c9fcc111972d4e90a488bcbc1f5c": {
@@ -39265,7 +39265,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 1: cannot get measurement: at line 2:1: invalid character '\\x17' found at start of measurement name"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "6f4f6edb67aeb49357964e2d5ef4c812": {
@@ -39426,7 +39426,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 0: at line 1:5: invalid utf-8 sequence in token \"\\\"\\v\\xbd\\ff\""
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "6ff10f5fe2b717518f837793b6805381": {
@@ -42529,7 +42529,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 0: at line 1:5: invalid utf-8 sequence in token \"\\\"\\v\\x86\""
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "7887d1f7d818b4cb8411af7c6c28f229": {
@@ -44955,7 +44955,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "7f439b6a98c05aef3ad6f3361b3413bd": {
@@ -45648,7 +45648,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "8115c36559687ce2d7f3712eae29c6c1": {
@@ -47116,7 +47116,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 4: at line 1:28: expected tag key after comma; got end of input"
+                "error": "cannot get metric 0: cannot get tag 0: at line 1:5: expected tag value after tag key \"r\", but none found"
             }
         },
         "8476265f18ea1b694a1552a95fa26933": {
@@ -47706,7 +47706,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "85db4898872cc1537bc055c303d047f9": {
@@ -47784,7 +47784,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 0: at line 1:5: invalid utf-8 sequence in token \"\\xbd\\v\\\"\\\\\\\"\\\\\\\"\\\\\\\"\\\\\\\"\\\\\\\"\\\\\\\"\\\\\\\"\\\\\\\"\\\\\\\"\\\\\\\"\\\\\\\"\\\\\\\"\\\\\\\"\\\\\\\"\\\\\\\"\\\\\\\"\\\\\\\"\\\\\\\"\\\\\\\"\\\\\\\"\\\\\\\"\\\\\\\"\\\\\\\"\\\\\\\"\\\\\\\"\\\\\\\"\\\\4\\\\\\\"\\\\\\\"\\\\\\\"\\\\\\\"\\\\\\\"\\\\\\\"\""
+                "error": "cannot get metric 0: cannot get tag 0: at line 1:5: invalid utf-8 sequence in token \"\\xbd\""
             }
         },
         "85fa7c57dfeef3bef1a4b9a4ffaebabb": {
@@ -49893,7 +49893,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 0: at line 1:5: expected tag value after tag key \"6\", but none found"
             }
         },
         "8cba70b066dcefcf39e6e1f4b365cff6": {
@@ -50069,7 +50069,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get field 0: at line 1:41: expected field key but none found"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "8d38c88d9d9f61b61b520df85bab725f": {
@@ -51188,7 +51188,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "90079bd73d915ef01f0fa6b3cbf01459": {
@@ -51368,7 +51368,7 @@
                             {
                                 "key": "v",
                                 "value": {
-                                    "string": "\\t"
+                                    "string": "\t"
                                 }
                             }
                         ]
@@ -51814,7 +51814,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "91b0b153d3c1e1048d621839d9d20b3f": {
@@ -51992,7 +51992,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get field 0: at line 1:39: expected field key but none found"
+                "error": "cannot get metric 0: cannot get tag 0: at line 1:6: expected tag value after tag key \" \", but none found"
             }
         },
         "92a52e4221104e38ca76269bec7d7eef": {
@@ -52169,7 +52169,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:9: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "92d7fb4f753f8b79349df4738f2b9dd9": {
@@ -52241,7 +52241,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "92fa8600050c8dddeaebd67d0d22690d": {
@@ -53083,7 +53083,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "954d2885ed0750adaa6548b2ecbec3d5": {
@@ -53185,7 +53185,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "959a7a408f3850bc8bc8912c667f0836": {
@@ -53753,7 +53753,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 0: at line 1:5: invalid utf-8 sequence in token \"E\\v\\x86\""
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "96df1f78cf19b33fdc003f24ff50642c": {
@@ -54208,7 +54208,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "984b88de7ad5f41ec605f9416defdf12": {
@@ -54403,7 +54403,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 5: at line 1:39: expected tag key after comma; got end of input"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "98e5f838981568ff562d17d5130f629d": {
@@ -56755,7 +56755,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "9fa54171f61d0bcbf309ace738666045": {
@@ -59082,7 +59082,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 5: cannot get tag 0: at line 6:3: expected '=' after tag key \"{\", but got '\\x03' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "a60564d9e42eefc1c0bf8027a80e8431": {
@@ -61617,7 +61617,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:9: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "addb5855f67f602794ec403b14a9456f": {
@@ -63801,7 +63801,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: duplicate tag key \"6\""
+                "error": "cannot get metric 0: cannot get tag 7: at line 1:36: expected tag key or field but found '\\x10' instead"
             }
         },
         "b47995bb4d9e488b7809554e89412c2a": {
@@ -63896,7 +63896,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 1: duplicate tag key \"6\""
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "b4b625f347096a903859bd65a2e947a8": {
@@ -64778,7 +64778,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 1: cannot get tag 1: at line 2:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 1: cannot get tag 1: at line 2:6: expected tag key or field but found '\\v' instead"
             }
         },
         "b71d6d3fd06ab908a53f80b3a809aae8": {
@@ -65290,7 +65290,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\f' instead"
             }
         },
         "b8cbd7281373145c903bd8a389bd95f8": {
@@ -65889,7 +65889,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "bad1df93a1c0860d2d152fa2cc870a2f": {
@@ -66053,7 +66053,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: duplicate tag key \"5\""
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "bb67b5a78f0d81ffe7885c42a19476f4": {
@@ -67569,7 +67569,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 1: cannot get field 0: at line 2:8: expected field key but none found"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "bfc79d5f1f74dee94db3f9476631bbbe": {
@@ -69925,7 +69925,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "c6e2d9ec3a318fbd57cd9556011ebb21": {
@@ -71741,7 +71741,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "cc3ae00f5fb14c42038d53b3bf0a9d1c": {
@@ -72797,7 +72797,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 3: at line 1:24: expected tag key or field but found '\\u007f' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "ced2667dc88581f4e5576594d60e52f3": {
@@ -73246,7 +73246,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "d0301ad1e2f450feb6f0aa286b42a90a": {
@@ -74238,26 +74238,7 @@
                 "implementation": "custom"
             },
             "output": {
-                "result": [
-                    {
-                        "time": 42000000000,
-                        "name": "m",
-                        "tags": [
-                            {
-                                "key": "k",
-                                "value": "x\u0001y"
-                            }
-                        ],
-                        "fields": [
-                            {
-                                "key": "v",
-                                "value": {
-                                    "float": 1
-                                }
-                            }
-                        ]
-                    }
-                ]
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\x01' instead"
             }
         },
         "d298d8b34076f4981387ed4a17cd93b9": {
@@ -75264,7 +75245,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get field 0: at line 1:30: expected field key but none found"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "d5191b6f069aa0774b73250aed8dd046": {
@@ -76048,7 +76029,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "d7f204b9611a5ccd2621693b12fe9708": {
@@ -77194,7 +77175,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "da5fa0463db720def426fce2917b651c": {
@@ -77417,7 +77398,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "daf4e083c9416fa56a666a5554998278": {
@@ -80256,7 +80237,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "dff269e01fba5a2cb2405c79776fb50e": {
@@ -80743,7 +80724,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "e11c371c99c08ea72e638be25f101443": {
@@ -83851,7 +83832,7 @@
                             {
                                 "key": "v",
                                 "value": {
-                                    "string": "\\n"
+                                    "string": "\n"
                                 }
                             }
                         ]
@@ -85095,7 +85076,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "eddddfd03fc3b1dbe832ca03b59271e0": {
@@ -85660,7 +85641,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get field 0: at line 1:28: expected field key but none found"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "ef50f199f6b194216dbf8520c90a0da2": {
@@ -88466,7 +88447,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get field 0: at line 1:26: expected field key but none found"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "f6f32c2bc91cb7d4ffa5143b5c7d1050": {
@@ -89481,7 +89462,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get field 0: at line 1:18: expected field key but none found"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "f9d6e94df94cb7ae71cc5468ede46fcd": {
@@ -89926,7 +89907,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: duplicate tag key \"\\\"\""
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "fae5598e8cb33c7b5ca453dabe7d1f1a": {
@@ -90632,7 +90613,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get field 0: at line 1:26: expected field key but none found"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "fd0a84c68c796042254906d70772a155": {
@@ -91144,7 +91125,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "fe36d3205388771dc9a900dc15a35338": {
@@ -91278,7 +91259,7 @@
                 "implementation": "fuzz"
             },
             "output": {
-                "error": "cannot get metric 0: cannot get tag 1: at line 1:8: expected tag key or field but found '=' instead"
+                "error": "cannot get metric 0: cannot get tag 1: at line 1:6: expected tag key or field but found '\\v' instead"
             }
         },
         "fea82b4565a52e40b6438ff9139bad5a": {
@@ -93710,7 +93691,7 @@
                 "implementation": "influxdbv2models"
             },
             "output": {
-                "result": "cpu,host=serverA,region=us-east str=\"foo\nbar\",value=1 1000000000"
+                "result": "cpu,host=serverA,region=us-east str=\"foo\\nbar\",value=1 1000000000"
             }
         },
         "70101bc0874d57fec2f83497a5a6ece4": {
