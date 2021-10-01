@@ -2,6 +2,7 @@ package lineprotocol
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -824,6 +825,16 @@ func (d *Decoder) syntaxErrorf(offset int, f string, a ...interface{}) error {
 	// Note: line corresponds to the current line at d.r1, so if
 	// there are any newlines after the location of the error, we need to
 	// reduce the line we report accordingly.
+	if d.r0+offset > cap(d.buf) || d.r1 > cap(d.buf) || d.r0+offset > d.r1 {
+		b := fmt.Sprintf("out of bounds error in Decoder.syntaxErrorf; d.r: [%d, %d]; offset: %d; d.line: %d:%d", d.r0, d.r1, offset, d.line, column)
+		if d.r1 > len(d.buf) {
+			b += fmt.Sprintf("; buf: [%d:]=%q", d.r0, d.buf[d.r0:])
+		} else {
+			b += fmt.Sprintf("; buf: [%d:%d]=%q", d.r0, d.r1, d.buf[d.r0:d.r1])
+		}
+		b += fmt.Sprintf("; error: %v", fmt.Errorf(f, a...))
+		panic(errors.New(b))
+	}
 	remain := d.buf[d.r0+offset : d.r1]
 	line := d.line - int64(bytes.Count(remain, newlineBytes))
 
