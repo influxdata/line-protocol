@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("p,t=sr,n=a value=.0,str=\"foo\nbar\" 1000000000")

@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("0\ve=9\v4686269268499\t\t\t\t\t\t0")

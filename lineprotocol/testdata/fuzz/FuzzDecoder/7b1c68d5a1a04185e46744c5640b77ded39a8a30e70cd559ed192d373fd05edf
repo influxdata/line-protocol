@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("cpu\\,main,s=t e=1")

@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("\xd1\ve=\" 6=\" 66141427825035 t")

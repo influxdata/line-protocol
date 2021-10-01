@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("u valustr=\"o\",str2=\"r\"")

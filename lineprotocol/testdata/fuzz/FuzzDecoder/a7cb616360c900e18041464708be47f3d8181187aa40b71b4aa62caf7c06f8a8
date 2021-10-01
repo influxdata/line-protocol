@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("f\v7=f\v920368\v=f\v920368\v2")

@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("9\ve=\" P\"\n0\ve=\" P\"=20e36854775808\v")

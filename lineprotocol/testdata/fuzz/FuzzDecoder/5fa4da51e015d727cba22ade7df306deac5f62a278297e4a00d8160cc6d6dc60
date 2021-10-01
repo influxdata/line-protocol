@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("#c\"\ve=7 not find \xb5xpected he\u007fdecimal numberst=f=")

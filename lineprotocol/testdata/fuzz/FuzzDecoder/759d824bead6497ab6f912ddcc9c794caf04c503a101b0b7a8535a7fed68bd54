@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("\uf699�\uf7bd�\uf7bd")

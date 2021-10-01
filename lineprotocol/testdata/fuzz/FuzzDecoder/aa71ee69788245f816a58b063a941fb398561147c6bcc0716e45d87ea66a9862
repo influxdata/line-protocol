@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("m,re\\=gion=t,server=a x=1")

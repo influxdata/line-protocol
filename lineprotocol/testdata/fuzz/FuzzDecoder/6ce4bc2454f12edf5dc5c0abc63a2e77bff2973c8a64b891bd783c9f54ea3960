@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("pu,os=serverA,e=us-east e=1.0")

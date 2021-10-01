@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("cpu,host=serverA,\\ =us-east value=1i")

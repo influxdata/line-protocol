@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("\"\vb=7,e=3e7,e=3e7,e=3e")

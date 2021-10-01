@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("u,o\\=st=localhost e=4")

@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("\"\v\x83=\"\foMnechEmptyMatchLiteralCharClassAnyCharNotNLAnyCharBeginLine@6\x94\x19yϹ\x8endLineBeginText\x00 ")

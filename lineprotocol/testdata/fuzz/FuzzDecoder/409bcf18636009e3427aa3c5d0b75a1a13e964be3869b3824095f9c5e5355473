@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("W0E ,e=\"0=\",0=hr\"")

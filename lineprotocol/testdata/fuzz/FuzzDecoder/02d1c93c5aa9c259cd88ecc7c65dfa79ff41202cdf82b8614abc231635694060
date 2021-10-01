@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("5,\\g\\\\g\\\\g\\=e=9\v\v\v\v\v\v\v\v")

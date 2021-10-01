@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("u,ml_PARSE_\x00\x00\x02\x00K_'}}\xf5B>\x12WNODE_OR_INDENTLESS_SEQUENCE_STATEion\\ zone=\x97 e=3")

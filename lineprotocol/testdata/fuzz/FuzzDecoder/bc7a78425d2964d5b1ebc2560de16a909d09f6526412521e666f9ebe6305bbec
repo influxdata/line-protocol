@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("f\v1=-6\\E\v1=-6\\\\")

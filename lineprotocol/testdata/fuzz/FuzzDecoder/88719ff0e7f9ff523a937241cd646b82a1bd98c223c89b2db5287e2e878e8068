@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("u value=9223372036854775808i\nu value=42")

@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("\",b=\\\x01,b=\\\x01,b=\\")

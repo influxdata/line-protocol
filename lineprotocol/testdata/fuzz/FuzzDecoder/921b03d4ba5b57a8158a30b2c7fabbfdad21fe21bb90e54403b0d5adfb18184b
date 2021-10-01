@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("u,host=serverA,n=us-west value=1.0E4")

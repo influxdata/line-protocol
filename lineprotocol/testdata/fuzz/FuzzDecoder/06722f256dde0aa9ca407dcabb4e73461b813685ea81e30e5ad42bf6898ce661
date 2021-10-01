@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("cpu,host=serverA,region=us-east value=\"{Hello\\\"{\\,}\\\" World}\" 1000000000")

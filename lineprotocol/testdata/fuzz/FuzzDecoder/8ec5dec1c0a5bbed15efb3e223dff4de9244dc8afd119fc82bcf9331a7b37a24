@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("cpu,host=srve,r=uas value=1.0,str=\"\" 00")

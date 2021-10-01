@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("\"\v\a=f\v\a=f\v\v\a=f\v\a=f\v\v\a=f\v\v\a=f\v\v\a=f\v\v\a=f\v\v\a=f\v\v\a=f\v\v\a=f\v\v\a=f\v\v\a=f\v\v\a=f\v\v\a=f\v\v\a=f\v\v\a=f\v\v\a=f\v\v\a=f\v\v\x06=f\v\v\a")

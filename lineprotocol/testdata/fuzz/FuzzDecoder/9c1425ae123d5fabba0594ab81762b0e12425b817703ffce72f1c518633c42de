@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("cpu,host=serverA,region=us-east bool=false,float=11,float2=12.123,int=10i,str=\"string val\" 1000000000")

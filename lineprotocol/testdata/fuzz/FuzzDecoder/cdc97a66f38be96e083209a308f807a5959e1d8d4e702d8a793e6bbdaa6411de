@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("cp,host=A,region=t l=1e4")

@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("u\v\x01=\"1\\\"\\\",t=k@yaml_PARSE_FLOW_SEQUENCE_FIRST_ENTRY_STATEe=")

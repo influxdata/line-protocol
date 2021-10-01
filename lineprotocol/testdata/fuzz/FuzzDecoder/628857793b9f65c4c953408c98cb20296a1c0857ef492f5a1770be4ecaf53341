@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("=\vb=5,e=9\v\n\"\v\x15=1,v=3\v\n\"\v\x15=5,e=9\v\n\"\vb=5,e=9\v\n\"\v\x15=1,v=3\v\n\"\v\x15=1,v=3\v\n\"\v\x15=1,v=3\v")

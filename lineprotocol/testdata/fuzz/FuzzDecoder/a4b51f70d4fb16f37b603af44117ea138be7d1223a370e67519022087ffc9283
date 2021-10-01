@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("1\fe=1.e0,b=1.e0,b=1.e")

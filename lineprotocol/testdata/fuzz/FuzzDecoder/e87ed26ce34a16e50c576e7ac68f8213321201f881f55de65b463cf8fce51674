@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("F\tb=9\n0\tb=9\n0\tb=9\n8\f")

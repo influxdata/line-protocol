@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("u e=-1e-4")

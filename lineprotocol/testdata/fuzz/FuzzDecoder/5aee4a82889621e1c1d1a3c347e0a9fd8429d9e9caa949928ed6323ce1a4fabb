@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("c,o=s,ren=as ue=1.0 946730096789012")

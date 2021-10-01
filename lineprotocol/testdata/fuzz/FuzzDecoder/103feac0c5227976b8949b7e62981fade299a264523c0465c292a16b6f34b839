@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("m,region=west,server=b,foo=bar x=1")

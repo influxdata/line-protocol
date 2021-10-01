@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("\"\vb=4i\vb=4in")

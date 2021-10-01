@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("cp,t=rA,reg=t ve=.0,tr=0")

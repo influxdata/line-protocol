@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("u e=\"{Hello\\\"{,}\\\" World}\" 1000000000")

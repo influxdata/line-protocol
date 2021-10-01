@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("9\vv=3\n\"\v\x15=1,v=3i")

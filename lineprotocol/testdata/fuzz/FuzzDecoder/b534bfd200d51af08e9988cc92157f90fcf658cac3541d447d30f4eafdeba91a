@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("\"\ve=1,6=\"\vt=0,cpu_time_guest=0,cpu_time_gue\x00\x00\x04\x00ice=0,rlimit_memory_data_soft=2147483647i,read_bytes=0i,rl\x00\x00\x00\x00_cpu_time_soft=2147483647i,involuntary_context_switches=2i,write_bytes=106496i,cpu_time_system=0,cpu_time_irq=0,cpu_usage=0,memory_vms=21659648i,memory_qata=1576960i,rlimit_memory_stack_hard=2147483647i,num_threads=1i,rlimit_memory_rss_soft=21,6=,")

@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("u value=2\nu value=i\nu e=4")

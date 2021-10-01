@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("\x01\v\v\v\x03\vb\v\v\x03\vu\v\v\x01\v\v\v\x03\vb\v\v\x03\v\x01\v\v\v\x03\v\v\v\v\v\\")

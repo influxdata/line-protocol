@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("\"\v1=1,e=F\v21465258\xff")

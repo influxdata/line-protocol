@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("\xff ,0=\"=\",=\xc7\"\xbd")

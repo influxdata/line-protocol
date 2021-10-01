@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("b e=TRUE\n1 e=TRUE\n")

@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("m f=\"blah\"=123,r 1531703600000000000")

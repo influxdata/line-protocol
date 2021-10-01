@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("cpu,b=2,c=3,b=1 value=1i 1000000000")

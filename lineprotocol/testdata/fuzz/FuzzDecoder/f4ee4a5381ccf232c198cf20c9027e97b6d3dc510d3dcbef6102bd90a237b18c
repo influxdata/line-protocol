@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("\"\vb=\"\f\"=0\n\"\vb=\"\f\"=0\n\"\vb=\"\f\"=0\n\"\vb=\"\f\"=0\n\"\vb=\"\f\"=0\ne\ve=\"\f\"=")

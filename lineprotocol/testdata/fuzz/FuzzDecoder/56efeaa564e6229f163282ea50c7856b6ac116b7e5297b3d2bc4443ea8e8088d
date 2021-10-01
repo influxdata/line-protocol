@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("u\ve=\"\vb=1,e=\",S=F y benchmarks matching `regexp`14551915228366851806640625x")

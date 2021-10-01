@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("5\t2=5\v867813\nu\t2=5\v867813\n")

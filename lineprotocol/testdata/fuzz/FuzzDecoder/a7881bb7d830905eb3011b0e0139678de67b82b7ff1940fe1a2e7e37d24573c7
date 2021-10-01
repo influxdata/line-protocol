@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("\"\vb=9\x04\ve=9\x04\ve=9\x04\ve=9\x00")

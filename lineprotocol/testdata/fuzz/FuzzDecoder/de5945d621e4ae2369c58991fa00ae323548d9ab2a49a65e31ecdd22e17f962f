@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("cpu value=9223372036854775808i")

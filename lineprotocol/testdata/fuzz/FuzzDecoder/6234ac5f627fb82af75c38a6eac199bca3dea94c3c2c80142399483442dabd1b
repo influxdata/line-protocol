@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("u,o=A,r=t r=\"\\\"\" 1000000000")

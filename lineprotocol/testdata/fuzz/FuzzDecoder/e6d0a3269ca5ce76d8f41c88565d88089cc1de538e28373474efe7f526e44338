@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("cpu,regions=east\\ west value=1.0")

@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("\x19\vb=4,e=Fe")

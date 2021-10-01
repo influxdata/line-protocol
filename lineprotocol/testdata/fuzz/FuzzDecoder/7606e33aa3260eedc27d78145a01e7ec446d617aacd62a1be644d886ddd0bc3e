@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("pu,os=A,gn=-s value=.0,str=\"fo\",str2=\"bar\"")

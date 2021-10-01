@@ -403,8 +403,8 @@ func (d *Decoder) NextField() (key []byte, val Value, err error) {
 
 	v, err := newValueFromBytes(kind, data, false)
 	if err != nil {
-		// We want to produce an error that points to where the field
-		// location, but NextFieldBytes has read past that.
+		// We want to produce an error that points to the start of
+		// the field value, but NextFieldBytes has read past that.
 		// However, we know the key length, and we can work out
 		// the how many characters it took when escaped, so
 		// we can reconstruct the index of the start of the field.

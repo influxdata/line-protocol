@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("m v=42i,f=42 36")

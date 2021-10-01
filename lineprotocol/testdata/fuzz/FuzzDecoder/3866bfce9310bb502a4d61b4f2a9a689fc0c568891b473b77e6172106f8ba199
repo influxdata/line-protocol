@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("u,h=rA,ion=- it=10i,at=10,f=00")

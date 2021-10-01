@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("u\vS=-0\"\ve=\"\",S=-0,S=-05i")

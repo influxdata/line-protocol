@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("\x18\ve=f 4=\"\"\n=\ve=f 5=")

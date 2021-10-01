@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("u,hostregion=t e=18446744073709551615u")

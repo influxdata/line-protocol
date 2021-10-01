@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("\r \xef= \n\r \xef= \n\r Q= ")

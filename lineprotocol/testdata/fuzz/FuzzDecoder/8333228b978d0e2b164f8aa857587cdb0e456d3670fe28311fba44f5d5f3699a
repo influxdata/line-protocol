@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("2\ve=f\v922337=f\v920368=f\v92337f=f\v920368=f\v922233=f\v1048644088\xff")
