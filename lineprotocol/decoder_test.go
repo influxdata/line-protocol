@@ -1,14 +1,17 @@
 package lineprotocol
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"regexp"
 	"strings"
 	"testing"
 	"testing/iotest"
+	"time"
 	"unicode/utf8"
 
 	qt "github.com/frankban/quicktest"
@@ -1350,4 +1353,121 @@ func TestErrorPositions(t *testing.T) {
 			c.Assert(eps.makeErr(test.err), qt.Equals, test.expectErr)
 		})
 	}
+}
+
+func TestDecodeLargeDataWithReader(t *testing.T) {
+	c := qt.New(t)
+	r, w := io.Pipe()
+	const maxTagCount = 9
+	const maxFieldCount = 4
+	const npoints = 2000
+	go func() {
+		defer w.Close()
+		bw := bufio.NewWriter(w)
+		defer bw.Flush()
+		g := newTokenGenerator()
+		var enc Encoder
+		enc.SetLax(true) // Allow out-of-order tag keys.
+		for i := 0; i < npoints; i++ {
+			ntags := g.rand.Intn(maxTagCount + 1)
+			nfields := g.rand.Intn(maxFieldCount) + 1
+			timestamp := g.rand.Int63n(0xffff_ffff_ffff)
+			enc.StartLineRaw(g.token())
+			for j := 0; j < ntags; j++ {
+				enc.AddTagRaw(g.token(), g.token())
+			}
+			for j := 0; j < nfields; j++ {
+				key, val := g.token(), g.token()
+				v, err := NewValueFromBytes(String, val)
+				if err != nil {
+					panic(err)
+				}
+				enc.AddFieldRaw(key, v)
+			}
+			enc.EndLine(time.Unix(0, timestamp))
+			bw.Write(enc.Bytes())
+			enc.Reset()
+		}
+	}()
+	g := newTokenGenerator()
+	var wc writeCounter
+	dec := NewDecoder(io.TeeReader(r, &wc))
+	n := 0
+	for ; dec.Next(); n++ {
+		if n >= npoints {
+			c.Fatalf("too many points decoded")
+		}
+		wantNtags := g.rand.Intn(maxTagCount + 1)
+		wantNfields := g.rand.Intn(maxFieldCount) + 1
+		wantTimestamp := g.rand.Int63n(0xffff_ffff_ffff)
+		m, err := dec.Measurement()
+		c.Assert(err, qt.IsNil)
+		c.Check(m, qt.DeepEquals, g.token(), qt.Commentf("n %d", n))
+		tagi := 0
+		for {
+			key, val, err := dec.NextTag()
+			c.Assert(err, qt.IsNil)
+			if key == nil {
+				break
+			}
+			if tagi >= wantNtags {
+				c.Fatalf("too many tags found on entry %d", n)
+			}
+			wantKey, wantVal := g.token(), g.token()
+			c.Check(key, qt.DeepEquals, wantKey)
+			c.Check(val, qt.DeepEquals, wantVal)
+			tagi++
+		}
+		c.Assert(tagi, qt.Equals, wantNtags)
+		fieldi := 0
+		for {
+			key, val, err := dec.NextField()
+			c.Assert(err, qt.IsNil)
+			if key == nil {
+				break
+			}
+			if fieldi >= wantNfields {
+				c.Fatalf("too many tags found on entry %d", n)
+			}
+			wantKey, wantVal := g.token(), g.token()
+			c.Check(key, qt.DeepEquals, wantKey)
+			c.Check(val.Interface(), qt.Equals, string(wantVal))
+			fieldi++
+		}
+		c.Assert(fieldi, qt.Equals, wantNfields)
+		t, err := dec.Time(Nanosecond, time.Time{})
+		c.Check(err, qt.IsNil)
+		c.Check(t.UnixNano(), qt.Equals, wantTimestamp)
+	}
+	c.Assert(n, qt.Equals, npoints)
+	c.Logf("total bytes: %v", wc.n)
+}
+
+type writeCounter struct {
+	n int
+}
+
+func (w *writeCounter) Write(buf []byte) (int, error) {
+	w.n += len(buf)
+	return len(buf), nil
+}
+
+func newTokenGenerator() *tokenGenerator {
+	return &tokenGenerator{
+		rand: rand.New(rand.NewSource(0)),
+	}
+}
+
+type tokenGenerator struct {
+	rand *rand.Rand
+}
+
+const alphabet = "abcdefghijklmnopqrstuvwxyz =, =, =,"
+
+func (g *tokenGenerator) token() []byte {
+	data := make([]byte, g.rand.Intn(40)+1)
+	for i := range data {
+		data[i] = alphabet[g.rand.Intn(len(alphabet))]
+	}
+	return data
 }

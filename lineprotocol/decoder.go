@@ -11,9 +11,16 @@ import (
 const (
 	// When the buffer is grown, it will be grown by a minimum of 8K.
 	minGrow = 8192
+
 	// The buffer will be grown if there's less than minRead space available
 	// to read into.
 	minRead = minGrow / 2
+
+	// maxSlide is the maximum number of bytes that will
+	// be copied to the start of the buffer when reset is called.
+	// This is a trade-off between copy overhead and the likelihood
+	// that a complete line-protocol entry will fit into this size.
+	maxSlide = 256
 )
 
 var (
@@ -720,11 +727,18 @@ func (d *Decoder) at(i int) byte {
 
 // reset discards all the data up to d.r1 and data in d.escBuf
 func (d *Decoder) reset() {
-	if d.r1 == len(d.buf) {
+	if unread := len(d.buf) - d.r1; unread == 0 {
 		// No bytes in the buffer, so we can start from the beginning without
 		// needing to copy anything (and get better cache behaviour too).
 		d.buf = d.buf[:0]
 		d.r1 = 0
+	} else if !d.complete && unread <= maxSlide {
+		// Slide the unread portion of the buffer to the
+		// start so that when we read more data,
+		// there's less chance that we'll need to grow the buffer.
+		copy(d.buf, d.buf[d.r1:])
+		d.r1 = 0
+		d.buf = d.buf[:unread]
 	}
 	d.r0 = d.r1
 	d.escBuf = d.escBuf[:0]
@@ -771,30 +785,20 @@ func (d *Decoder) readMore() {
 	}
 	n := cap(d.buf) - len(d.buf)
 	if n < minRead {
-		// There's not enough available space at the end of the buffer to read into.
-		if d.r0+n >= minRead {
-			// There's enough space when we take into account already-used
-			// part of buf, so slide the data to the front.
-			copy(d.buf, d.buf[d.r0:])
-			d.buf = d.buf[:len(d.buf)-d.r0]
-			d.r1 -= d.r0
-			d.r0 = 0
-		} else {
-			// We need to grow the buffer. Note that we don't have to copy
-			// the unused part of the buffer (d.buf[:d.r0]).
-			// TODO provide a way to limit the maximum size that
-			// the buffer can grow to.
-			used := len(d.buf) - d.r0
-			n1 := cap(d.buf) * 2
-			if n1-used < minGrow {
-				n1 = used + minGrow
-			}
-			buf1 := make([]byte, used, n1)
-			copy(buf1, d.buf[d.r0:])
-			d.buf = buf1
-			d.r1 -= d.r0
-			d.r0 = 0
+		// We need to grow the buffer. Note that we don't have to copy
+		// the unused part of the buffer (d.buf[:d.r0]).
+		// TODO provide a way to limit the maximum size that
+		// the buffer can grow to.
+		used := len(d.buf) - d.r0
+		n1 := cap(d.buf) * 2
+		if n1-used < minGrow {
+			n1 = used + minGrow
 		}
+		buf1 := make([]byte, used, n1)
+		copy(buf1, d.buf[d.r0:])
+		d.buf = buf1
+		d.r1 -= d.r0
+		d.r0 = 0
 	}
 	n, err := d.rd.Read(d.buf[len(d.buf):cap(d.buf)])
 	d.buf = d.buf[:len(d.buf)+n]
