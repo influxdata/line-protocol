@@ -33,19 +33,22 @@ type Encoder struct {
 }
 
 // SetMaxLineBytes sets a maximum length for a line, Encode will error if the generated line is longer
+// The default behavior, and behavior when set to zero, is to allow unbounded line lengths.
 func (e *Encoder) SetMaxLineBytes(i int) {
 	e.maxLineBytes = i
 }
 
 // SetFieldSortOrder sets a sort order for the data.
 // The options are:
-// NoSortFields (doesn't sort the fields)
+// NoSortFields (default, doesn't sort the fields)
 // SortFields (sorts the keys in alphabetical order)
 func (e *Encoder) SetFieldSortOrder(s FieldSortOrder) {
 	e.fieldSortOrder = s
 }
 
-// SetFieldTypeSupport sets flags for if the encoder supports certain optional field types such as uint64
+// SetFieldTypeSupport sets flags for if the encoder supports certain optional field types such as uint64.
+// The default behavior for uint64 is to replace the field value with the maximimum non-negative int64 value that
+// does not exceed the uint64 value.
 func (e *Encoder) SetFieldTypeSupport(s FieldTypeSupport) {
 	e.fieldTypeSupport = s
 }
@@ -65,6 +68,8 @@ func (e *Encoder) SetPrecision(p time.Duration) {
 // NewEncoder gives us an encoder that marshals to a writer in influxdb line protocol
 // as defined by:
 // https://docs.influxdata.com/influxdb/v1.5/write_protocols/line_protocol_reference/
+//
+// Each output record is terminated by a newline.
 func NewEncoder(w io.Writer) *Encoder {
 	return &Encoder{
 		w:         w,
@@ -80,7 +85,8 @@ func NewEncoder(w io.Writer) *Encoder {
 // more complex objects
 var comma = []byte(",")
 
-// Encode marshals a Metric to the io.Writer in the Encoder
+// Encode marshals a Metric to the io.Writer in the Encoder.
+// The int return value is the number of bytes used to encode the record, including terminal newline
 func (e *Encoder) Encode(m Metric) (int, error) {
 	err := e.buildHeader(m)
 	if err != nil {
