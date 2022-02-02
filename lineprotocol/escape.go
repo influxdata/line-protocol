@@ -38,7 +38,7 @@ func newEscaper(escapes string) *escaper {
 
 // appendEscaped returns the escaped form of s appended to buf.
 func (e *escaper) appendEscaped(buf []byte, s string) []byte {
-	newLen := e.escapedLen(s)
+	newLen, startIndex := e.escapedLen(s)
 	if newLen == len(s) {
 		return append(buf, s...)
 	}
@@ -47,25 +47,36 @@ func (e *escaper) appendEscaped(buf []byte, s string) []byte {
 		copy(nBuf, buf)
 		buf = nBuf
 	}
-	e._escape(buf[len(buf):len(buf)+newLen], s)
+	e._escape(buf[len(buf):len(buf)+newLen], s, startIndex)
 	return buf[:len(buf)+newLen]
 }
 
-func (e *escaper) escapedLen(s string) int {
+// escaped returns the length that s will be after escaping
+// and the index of the first character in s that needs escaping.
+func (e *escaper) escapedLen(s string) (escLen, startIndex int) {
+	startIndex = len(s)
 	n := len(s)
 	for i := 0; i < len(e.escapes); i++ {
-		n += strings.Count(s, e.escapes[i:i+1])
+		k := strings.IndexByte(s, e.escapes[i])
+		if k == -1 {
+			continue
+		}
+		if k < startIndex {
+			startIndex = k
+		}
+		n += 1 + strings.Count(s[k+1:], e.escapes[i:i+1])
 	}
-	return n
+	return n, startIndex
 }
 
 // _escape writes the escaped form of s into buf. It
 // assumes buf is the correct length (as determined
 // by escapedLen).
 // This method should be treated as private to escaper.
-func (e *escaper) _escape(buf []byte, s string) {
-	j := 0
-	for i := 0; i < len(s); i++ {
+func (e *escaper) _escape(buf []byte, s string, escIndex int) {
+	copy(buf, s[:escIndex])
+	j := escIndex
+	for i := escIndex; i < len(s); i++ {
 		b := s[i]
 		if r := e.table[b]; r != 0 {
 			buf[j] = '\\'

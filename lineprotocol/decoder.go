@@ -96,7 +96,6 @@ func NewDecoderWithBytes(buf []byte) *Decoder {
 	return &Decoder{
 		buf:      buf,
 		complete: true,
-		escBuf:   make([]byte, 0, 512),
 		section:  endSection,
 		line:     1,
 	}
@@ -201,8 +200,8 @@ func (d *Decoder) NextTag() (key, value []byte, err error) {
 	} else if !ok {
 		return nil, nil, nil
 	}
-	if d.ensure(1) && fieldSeparatorSpace.get(d.at(0)) {
-		d.take(fieldSeparatorSpace)
+	if d.ensure(1) && d.at(0) == ' ' {
+		d.discardc(' ')
 		d.section = fieldSection
 		return nil, nil, nil
 	}
@@ -248,8 +247,7 @@ func (d *Decoder) advanceTagComma() error {
 	if !d.ensure(1) {
 		return nil
 	}
-	nextc := d.at(0)
-	if nextc != ',' {
+	if d.at(0) != ',' {
 		return nil
 	}
 	// If there's a comma, there's a tag, so check that there's the start
@@ -348,7 +346,7 @@ func (d *Decoder) NextFieldBytes() (key []byte, kind ValueKind, value []byte, er
 	if !whitespace.get(nextc) {
 		return nil, Unknown, nil, d.syntaxErrorf(d.r1-d.r0, "unexpected character %q after field", nextc)
 	}
-	d.take(fieldSeparatorSpace)
+	d.discardc(' ')
 	if d.takeEOL() {
 		d.section = endSection
 		return fieldKey, fieldKind, fieldVal, nil
@@ -415,7 +413,8 @@ func (d *Decoder) NextField() (key []byte, val Value, err error) {
 		// However, we know the key length, and we can work out
 		// the how many characters it took when escaped, so
 		// we can reconstruct the index of the start of the field.
-		startIndex += tagKeyEscapes.escapedLen(unsafeBytesToString(key)) + len("=")
+		escLen, _ := tagKeyEscapes.escapedLen(unsafeBytesToString(key))
+		startIndex += escLen + len("=")
 		return nil, Value{}, d.syntaxErrorf(startIndex, "cannot parse value for field key %q: %w", key, err)
 	}
 	return key, v, nil
@@ -444,7 +443,7 @@ func (d *Decoder) TimeBytes() ([]byte, error) {
 		d.take(notEOL)
 		return nil, d.syntaxErrorf(start, "invalid timestamp (%q)", d.buf[d.r0+start:d.r1])
 	}
-	d.take(fieldSeparatorSpace)
+	d.discardc(' ')
 	if !d.ensure(1) {
 		d.section = endSection
 		return timeBytes, nil
@@ -494,7 +493,7 @@ func (d *Decoder) consumeLine() {
 func (d *Decoder) skipEmptyLines() {
 	for {
 		startLine := d.r1 - d.r0
-		d.take(fieldSeparatorSpace)
+		d.discardc(' ')
 		switch d.at(0) {
 		case '#':
 			// Found a comment.
@@ -624,6 +623,27 @@ outer:
 	return d.buf[d.r0+start : d.r1]
 }
 
+// discardc is similar to take but just discards all the next consecutive
+// occurrences of a single character.
+func (d *Decoder) discardc(dc byte) {
+	// Note: use a relative index for start because absolute
+	// indexes aren't stable (the contents of the buffer can be
+	// moved when reading more data).
+	for {
+		if !d.ensure(1) {
+			break
+		}
+		buf := d.buf[d.r1:]
+		for i, c := range buf {
+			if c != dc {
+				d.r1 += i
+				return
+			}
+		}
+		d.r1 += len(buf)
+	}
+}
+
 // takeEsc is like take except that escaped characters also count as
 // part of the set. The escapeTable determines which characters
 // can be escaped.
@@ -632,7 +652,7 @@ outer:
 // case it doesn't need to go to the trouble of unescaping it), and the
 // index into buf that corresponds to the start of the taken bytes.
 //
-// takeEsc also returns the offset of the start of the escaped bytes
+// takeEsc also returns the offset of the start of the taken bytes
 // relative to d.r0.
 //
 // It returns an error if the returned string contains an
@@ -649,12 +669,16 @@ func (d *Decoder) takeEsc(set *byteSet, escapeTable *[256]byte) ([]byte, int, er
 
 	// startEsc holds the index into r.escBuf of the start of the escape buffer.
 	startEsc := len(d.escBuf)
+	charBits := byte(0)
 outer:
 	for {
-		if !d.ensure(1) {
+		//if !d.ensure(1) {
+		//	break
+		//}
+		buf := d.buf[d.r1:]
+		if len(buf) < 1 && !d.ensure1(1) {
 			break
 		}
-		buf := d.buf[d.r1:]
 		for i := 0; i < len(buf); i++ {
 			c := buf[i]
 			if c != '\\' {
@@ -663,6 +687,7 @@ outer:
 					d.r1 += i
 					break outer
 				}
+				charBits |= c
 				continue
 			}
 			if i+1 >= len(buf) {
@@ -706,7 +731,9 @@ outer:
 		d.escBuf = append(d.escBuf, d.buf[startUnesc+d.r0:d.r1]...)
 		taken = d.escBuf[startEsc:]
 	}
-	if !utf8.Valid(taken) {
+	// Fast-path check for valid UTF-8 - if no high bit is set,
+	// then it can't be invalid UTF-8.
+	if (charBits&0x80) != 0 && !utf8.Valid(taken) {
 		// TODO point directly to the offending sequence.
 		return taken, start, d.syntaxErrorf(start, "invalid utf-8 sequence in token %q", taken)
 	}
