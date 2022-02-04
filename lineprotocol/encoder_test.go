@@ -2,8 +2,6 @@ package lineprotocol
 
 import (
 	"sort"
-	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -270,7 +268,7 @@ var encoderDataErrorTests = []struct {
 		}},
 		// Include an explicit timestamp so that we test the path
 		// in Endline that checks lineHasError.
-		Time: "123456",
+		Time: time.Unix(0, 123456),
 	},
 	expectError: `invalid field key ""`,
 }, {
@@ -281,7 +279,7 @@ var encoderDataErrorTests = []struct {
 			Key:   "x",
 			Value: int64(1),
 		}},
-		Time: "1000-01-01T12:00:00Z",
+		Time: mustParseTime("1000-01-01T12:00:00Z"),
 	},
 	expectError: `timestamp 1000-01-01T12:00:00Z: line-protocol value out of range`,
 }, {
@@ -292,7 +290,7 @@ var encoderDataErrorTests = []struct {
 			Key:   "x",
 			Value: int64(1),
 		}},
-		Time: "8888-01-01T12:00:00Z",
+		Time: mustParseTime("8888-01-01T12:00:00Z"),
 	},
 	expectError: `timestamp 8888-01-01T12:00:00Z: line-protocol value out of range`,
 }}
@@ -406,25 +404,7 @@ func encodePoint(e *Encoder, p Point) {
 	for _, field := range p.Fields {
 		e.AddField(field.Key, MustNewValue(field.Value))
 	}
-	var t time.Time
-	if p.Time != "" {
-		if strings.Contains(p.Time, "T") {
-			// Allow RFC3339 time values so we can test out-of-bands
-			// timestamps.
-			t1, err := time.Parse(time.RFC3339, p.Time)
-			if err != nil {
-				panic(err)
-			}
-			t = t1
-		} else {
-			ns, err := strconv.ParseInt(p.Time, 10, 64)
-			if err != nil {
-				panic(err)
-			}
-			t = time.Unix(0, ns)
-		}
-	}
-	e.EndLine(t)
+	e.EndLine(p.Time)
 }
 
 func pointsHaveError(ps []Point) bool {
@@ -452,4 +432,12 @@ func pointWithSortedTags(p Point) Point {
 		return p.Tags[i].Key < p.Tags[j].Key
 	})
 	return p
+}
+
+func mustParseTime(ts string) time.Time {
+	t, err := time.Parse(time.RFC3339, ts)
+	if err != nil {
+		panic(err)
+	}
+	return t
 }
