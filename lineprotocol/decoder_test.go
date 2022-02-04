@@ -33,7 +33,9 @@ type Point struct {
 	MeasurementError string
 	Tags             []TagKeyValue
 	Fields           []FieldKeyValue
-	Time             string
+	Precision        Precision
+	DefaultTime      time.Time
+	Time             time.Time
 	TimeError        string
 }
 
@@ -118,19 +120,15 @@ var sectionCheckers = []func(c *qt.C, dec *Decoder, expect Point, errp errPositi
 		c.Assert(fields, qt.DeepEquals, expectFields)
 	},
 	timeSection: func(c *qt.C, dec *Decoder, expect Point, errp errPositions) {
-		timeBytes, err := dec.TimeBytes()
+		timestamp, err := dec.Time(expect.Precision, expect.DefaultTime)
 		if expect.TimeError != "" {
 			c.Assert(err, qt.Satisfies, isDecodeError)
 			c.Assert(err, qt.ErrorMatches, regexp.QuoteMeta(errp.makeErr(expect.TimeError)))
-			c.Assert(timeBytes, qt.IsNil)
+			c.Assert(timestamp, qt.DeepEquals, time.Time{})
 			return
 		}
 		c.Assert(err, qt.IsNil)
-		if expect.Time == "" {
-			c.Assert(timeBytes, qt.IsNil)
-			return
-		}
-		c.Assert(string(timeBytes), qt.Equals, expect.Time)
+		c.Assert(timestamp, qt.DeepEquals, expect.Time)
 	},
 }
 
@@ -173,7 +171,7 @@ var decoderTests = []struct {
 			Key:   "boolfield",
 			Value: true,
 		}},
-		Time: "1602841605822791506",
+		Time: time.Unix(0, 1602841605822791506),
 	}},
 }, {
 	testName: "multiple-entries",
@@ -194,7 +192,7 @@ var decoderTests = []struct {
 			Key:   "x",
 			Value: "first",
 		}},
-		Time: "1602841605822791506",
+		Time: time.Unix(0, 1602841605822791506),
 	}, {
 		Measurement: "m2",
 		Tags: []TagKeyValue{{
@@ -205,7 +203,7 @@ var decoderTests = []struct {
 			Key:   "x",
 			Value: "second",
 		}},
-		Time: "1602841605822792000",
+		Time: time.Unix(0, 1602841605822792000),
 	}},
 }, {
 	testName: "multiple-entries-with-error#1",
@@ -286,7 +284,7 @@ m3 value=32.0
 			Key:   "field=x",
 			Value: "fir\"\n,st\\",
 		}},
-		Time: "1602841605822791506",
+		Time: time.Unix(0, 1602841605822791506),
 	}},
 }, {
 	testName: "missing-quotes",
@@ -294,7 +292,7 @@ m3 value=32.0
 	expect: []Point{{
 		Measurement: "TestBucket",
 		Fields: []FieldKeyValue{{
-			Error: "at line ∑¹: field value has unrecognized type",
+			Error: `at line ∑¹: value for field "FieldOné" ("Happy") has unrecognized type`,
 		}},
 	}},
 }, {
@@ -330,7 +328,6 @@ next x=1`,
 			Key:   "f",
 			Value: 1.0,
 		}},
-		Time: "",
 	}},
 }, {
 	testName: "missing timestamp with newline",
@@ -341,7 +338,63 @@ next x=1`,
 			Key:   "f",
 			Value: 1.0,
 		}},
-		Time: "",
+	}},
+}, {
+	testName: "out-of-range-timestamp",
+	text:     "b f=1 ∑¹9223372036854775808",
+	expect: []Point{{
+		Measurement: "b",
+		Fields: []FieldKeyValue{{
+			Key:   "f",
+			Value: 1.0,
+		}},
+		TimeError: `at line ∑¹: invalid timestamp ("9223372036854775808"): line-protocol value out of range`,
+	}},
+}, {
+	testName: "out-of-range-timestamp-due-to-precision",
+	text:     "b f=1 ∑¹200000000000000000",
+	expect: []Point{{
+		Measurement: "b",
+		Fields: []FieldKeyValue{{
+			Key:   "f",
+			Value: 1.0,
+		}},
+		Precision: Second,
+		TimeError: `at line ∑¹: invalid timestamp ("200000000000000000"): line-protocol value out of range`,
+	}},
+}, {
+	testName: "negative-timestamp-just-in-range",
+	text:     "b f=1 ∑¹-9223372036854775808",
+	expect: []Point{{
+		Measurement: "b",
+		Fields: []FieldKeyValue{{
+			Key:   "f",
+			Value: 1.0,
+		}},
+		Time: time.Unix(0, -9223372036854775808),
+	}},
+}, {
+	testName: "negative-timestamp-just-out-of-range",
+	text:     "b f=1 ∑¹-9223372036854775809",
+	expect: []Point{{
+		Measurement: "b",
+		Fields: []FieldKeyValue{{
+			Key:   "f",
+			Value: 1.0,
+		}},
+		TimeError: `at line ∑¹: invalid timestamp ("-9223372036854775809"): line-protocol value out of range`,
+	}},
+}, {
+	testName: "missing-timestamp-with-default",
+	text:     "b f=1",
+	expect: []Point{{
+		Measurement: "b",
+		Fields: []FieldKeyValue{{
+			Key:   "f",
+			Value: 1.0,
+		}},
+		DefaultTime: time.Unix(0, 1643971097811314803),
+		Time:        time.Unix(0, 1643971097811314803),
 	}},
 }, {
 	testName: "field-with-space-and-no-timestamp",
@@ -352,7 +405,6 @@ next x=1`,
 			Key:   "f",
 			Value: -7.0,
 		}},
-		Time: "",
 	}},
 }, {
 	testName: "carriage-returns",
@@ -412,7 +464,7 @@ next x=1`,
 			Key:   "f",
 			Value: "hello\ngoodbye\nx",
 		}, {
-			Error: `at line ∑¹: field value has unrecognized type`,
+			Error: `at line ∑¹: value for field "gé" ("invalid") has unrecognized type`,
 		}},
 	}},
 }, {
@@ -424,7 +476,7 @@ next x=1`,
 			Key:   "f",
 			Value: "a\nb",
 		}, {
-			Error: `at line ∑¹: expected closing quote for string field value, found end of input`,
+			Error: `at line ∑¹: expected closing quote for string field "g", found end of input`,
 		}},
 	}},
 }, {
@@ -488,6 +540,42 @@ next x=1`,
 		Fields: []FieldKeyValue{{
 			Key:   "x",
 			Value: 1.0,
+		}},
+	}},
+}, {
+	testName: "bad-tag-key-#1",
+	text:     "m∑¹",
+	expect: []Point{{
+		Measurement: "m",
+		Tags: []TagKeyValue{{
+			Error: `at line ∑¹: expected tag key or field but found end of input instead`,
+		}},
+	}},
+}, {
+	testName: "bad-tag-key-#2",
+	text:     "m,∑¹=bar¹",
+	expect: []Point{{
+		Measurement: "m",
+		Tags: []TagKeyValue{{
+			Error: `at line ∑¹: empty tag key`,
+		}},
+	}},
+}, {
+	testName: "bad-tag-key-#3",
+	text:     "m,∑¹x =y¹",
+	expect: []Point{{
+		Measurement: "m",
+		Tags: []TagKeyValue{{
+			Error: `at line ∑¹: expected '=' after tag key "x", but got ' ' instead`,
+		}},
+	}},
+}, {
+	testName: "bad-tag-key-#4",
+	text:     "m,∑¹x",
+	expect: []Point{{
+		Measurement: "m",
+		Tags: []TagKeyValue{{
+			Error: `at line ∑¹: expected '=' after tag key "x", but got end of input instead`,
 		}},
 	}},
 }}
@@ -887,7 +975,7 @@ var scanEntriesBenchmarks = []struct {
 			Key:   "field",
 			Value: strings.Repeat("a", 4500),
 		}},
-		Time: "1602841605822791506",
+		Time: time.Unix(0, 1602841605822791506),
 	},
 }, {
 	name: "long-lines-with-escapes",
@@ -917,7 +1005,7 @@ var scanEntriesBenchmarks = []struct {
 			Key:   "field",
 			Value: strings.Repeat(`"`, 4500),
 		}},
-		Time: "1602841605822791506",
+		Time: time.Unix(0, 1602841605822791506),
 	},
 }, {
 	name: "single-short-line",
@@ -934,7 +1022,7 @@ var scanEntriesBenchmarks = []struct {
 			Key:   "y",
 			Value: 1.0,
 		}},
-		Time: "1602841605822791506",
+		Time: time.Unix(0, 1602841605822791506),
 	},
 }, {
 	name:     "single-short-line-with-escapes",
@@ -949,7 +1037,7 @@ var scanEntriesBenchmarks = []struct {
 			Key:   "y",
 			Value: 1.0,
 		}},
-		Time: "1602841605822791506",
+		Time: time.Unix(0, 1602841605822791506),
 	},
 }, {
 	name: "many-short-lines",
@@ -973,7 +1061,7 @@ var scanEntriesBenchmarks = []struct {
 			Key:   "y",
 			Value: 1.0,
 		}},
-		Time: "1602841605822791506",
+		Time: time.Unix(0, 1602841605822791506),
 	},
 }, {
 	name:     "field-key-escape-not-escapable",
@@ -984,7 +1072,7 @@ var scanEntriesBenchmarks = []struct {
 			Key:   `va\lue`,
 			Value: 42.0,
 		}},
-		Time: "1602841605822791506",
+		Time: time.Unix(0, 1602841605822791506),
 	},
 }, {
 	name:     "tag-value-triple-escape-space",
@@ -999,7 +1087,7 @@ var scanEntriesBenchmarks = []struct {
 			Key:   `value`,
 			Value: 42.0,
 		}},
-		Time: "1602841605822791506",
+		Time: time.Unix(0, 1602841605822791506),
 	},
 }, {
 	name:     "procstat",
@@ -1170,7 +1258,7 @@ var scanEntriesBenchmarks = []struct {
 			Key:   "rlimit_realtime_priority_hard",
 			Value: int64(0),
 		}},
-		Time: "1517620624000000000",
+		Time: time.Unix(0, 1517620624000000000),
 	},
 }}
 

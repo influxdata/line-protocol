@@ -24,7 +24,9 @@ const (
 )
 
 var (
-	fieldSeparatorSpace   = newByteSet(" ")
+	// Note: in some places we hard-code a single space in the source for efficency.
+	fieldSeparatorSpace = newByteSet(" ")
+
 	whitespace            = fieldSeparatorSpace.union(newByteSet("\r\n"))
 	tagKeyChars           = newByteSet(",=").union(whitespace).union(nonPrintable).invert()
 	tagKeyEscapes         = newEscaper(",= ")
@@ -210,13 +212,21 @@ func (d *Decoder) NextTag() (key, value []byte, err error) {
 		return nil, nil, err
 	}
 	if len(tagKey) == 0 || !d.ensure(1) || d.at(0) != '=' {
-		if !d.ensure(1) {
-			return nil, nil, d.syntaxErrorf(i0, "empty tag name")
-		}
-		if len(tagKey) > 0 {
+		hasKey := len(tagKey) != 0
+		eof := !d.ensure(1)
+		hasEquals := !eof && d.at(0) == '='
+		switch {
+		case eof && !hasKey:
+			return nil, nil, d.syntaxErrorf(i0, "expected tag key or field but found end of input instead")
+		case eof:
+			return nil, nil, d.syntaxErrorf(i0, "expected '=' after tag key %q, but got end of input instead", tagKey)
+		case hasKey:
 			return nil, nil, d.syntaxErrorf(i0, "expected '=' after tag key %q, but got %q instead", tagKey, d.at(0))
+		case hasEquals:
+			return nil, nil, d.syntaxErrorf(i0, "empty tag key")
+		default:
+			return nil, nil, d.syntaxErrorf(i0, "expected tag key or field but found %q instead", d.at(0))
 		}
-		return nil, nil, d.syntaxErrorf(i0, "expected tag key or field but found %q instead", d.at(0))
 	}
 	d.advance(1)
 	tagVal, i0, err := d.takeEsc(tagValChars, &tagValEscapes.revTable)
@@ -293,7 +303,7 @@ func (d *Decoder) NextFieldBytes() (key []byte, kind ValueKind, value []byte, er
 	}
 	d.advance(1)
 	if !d.ensure(1) {
-		return nil, Unknown, nil, d.syntaxErrorf(d.r1-d.r0, "expected field value, found end of input")
+		return nil, Unknown, nil, d.syntaxErrorf(d.r1-d.r0, "expected value for field %q, found end of input", fieldKey)
 	}
 	var fieldVal []byte
 	var fieldKind ValueKind
@@ -308,7 +318,7 @@ func (d *Decoder) NextFieldBytes() (key []byte, kind ValueKind, value []byte, er
 		}
 		fieldKind = String
 		if !d.ensure(1) {
-			return nil, Unknown, nil, d.syntaxErrorf(i0-1, "expected closing quote for string field value, found end of input")
+			return nil, Unknown, nil, d.syntaxErrorf(i0-1, "expected closing quote for string field %q, found end of input", fieldKey)
 		}
 		if d.at(0) != '"' {
 			// This can't happen, as all characters are allowed in a string.
@@ -331,8 +341,12 @@ func (d *Decoder) NextFieldBytes() (key []byte, kind ValueKind, value []byte, er
 		default:
 			fieldKind = Float
 		}
+	case ' ', ',':
+		return nil, Unknown, nil, d.syntaxErrorf(d.r1-d.r0, "missing field value for field %q", fieldKey)
 	default:
-		return nil, Unknown, nil, d.syntaxErrorf(d.r1-d.r0, "field value has unrecognized type")
+		start := d.r1 - d.r0
+		fieldVal := d.take(fieldValChars)
+		return nil, Unknown, nil, d.syntaxErrorf(start, "value for field %q (%q) has unrecognized type", fieldKey, fieldVal)
 	}
 	if !d.ensure(1) {
 		d.section = endSection
@@ -344,7 +358,7 @@ func (d *Decoder) NextFieldBytes() (key []byte, kind ValueKind, value []byte, er
 		return fieldKey, fieldKind, fieldVal, nil
 	}
 	if !whitespace.get(nextc) {
-		return nil, Unknown, nil, d.syntaxErrorf(d.r1-d.r0, "unexpected character %q after field", nextc)
+		return nil, Unknown, nil, d.syntaxErrorf(d.r1-d.r0, "unexpected character %q after field %q", nextc, fieldKey)
 	}
 	d.discardc(' ')
 	if d.takeEOL() {
@@ -460,6 +474,15 @@ func (d *Decoder) TimeBytes() ([]byte, error) {
 // Time is a wrapper around TimeBytes that returns the timestamp
 // assuming the given precision.
 func (d *Decoder) Time(prec Precision, defaultTime time.Time) (time.Time, error) {
+	// Even though TimeBytes calls advanceToSection,
+	// we need to call it here too so that we know exactly where
+	// the timestamp starts so that start is accurate.
+	if ok, err := d.advanceToSection(timeSection); err != nil {
+		return time.Time{}, err
+	} else if !ok {
+		return defaultTime.Truncate(prec.Duration()), err
+	}
+	start := d.r1 - d.r0
 	data, err := d.TimeBytes()
 	if err != nil {
 		return time.Time{}, err
@@ -469,11 +492,11 @@ func (d *Decoder) Time(prec Precision, defaultTime time.Time) (time.Time, error)
 	}
 	ts, err := parseIntBytes(data, 10, 64)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("invalid timestamp: %w", maybeOutOfRange(err, "invalid syntax"))
+		return time.Time{}, d.syntaxErrorf(start, "invalid timestamp (%q): %w", data, maybeOutOfRange(err, "invalid syntax"))
 	}
 	ns, ok := prec.asNanoseconds(ts)
 	if !ok {
-		return time.Time{}, fmt.Errorf("invalid timestamp: %w", ErrValueOutOfRange)
+		return time.Time{}, d.syntaxErrorf(start, "invalid timestamp (%q): %w", data, ErrValueOutOfRange)
 	}
 	return time.Unix(0, ns), nil
 }
@@ -842,7 +865,7 @@ func (d *Decoder) readMore() {
 // and the using the given fmt.Sprintf-formatted message.
 func (d *Decoder) syntaxErrorf(offset int, f string, a ...interface{}) error {
 	// Note: we only ever reset the buffer at the end of an entry,
-	// so we can assume that that d.r0 corresponds to column 1.
+	// so we can assume that d.r0 corresponds to column 1.
 	buf := d.buf[d.r0 : d.r0+offset]
 	var columnBytes []byte
 	if i := bytes.LastIndexByte(buf, '\n'); i >= 0 {
