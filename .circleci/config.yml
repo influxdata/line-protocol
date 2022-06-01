@@ -2,7 +2,7 @@ version: 2
 jobs:
   build:
     docker:
-      - image: circleci/golang:1.15.2
+      - image: circleci/golang:1.17.5
 
     working_directory: /go/src/github.com/influxdata/line-protocol
     steps:
