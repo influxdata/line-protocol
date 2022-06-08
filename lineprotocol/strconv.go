@@ -41,9 +41,10 @@ func parseBoolBytes(s []byte) (byte, error) {
 // It is unsafe, and is intended to prepare input to short-lived functions
 // that require strings.
 func unsafeBytesToString(data []byte) string {
-	dataHeader := *(*reflect.SliceHeader)(unsafe.Pointer(&data))
-	return *(*string)(unsafe.Pointer(&reflect.StringHeader{
-		Data: dataHeader.Data,
-		Len:  dataHeader.Len,
-	}))
+	dataHeader := (*reflect.SliceHeader)(unsafe.Pointer(&data))
+	var str string
+	stringHeader := (*reflect.StringHeader)(unsafe.Pointer(&str))
+	stringHeader.Data = dataHeader.Data
+	stringHeader.Len = dataHeader.Len
+	return str
 }
